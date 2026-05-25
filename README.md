@@ -5,7 +5,8 @@ StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis wi
 The current implementation focuses on a practical CAE workflow:
 
 - identify 3D five-face artificial boundaries or 2D three-edge artificial boundaries
-- compute viscous-spring boundary parameters from soil material properties
+- compute viscous-spring boundary parameters from soil material properties, with
+  boundary-node grouping for layered soil models
 - apply visual `SpringDashpotToGround` features in Abaqus/CAE
 - weight nodal spring-dashpot coefficients by tributary area or length
 - run geostatic equilibrium, read boundary reaction forces, and apply equivalent reaction-balance nodal loads
@@ -13,7 +14,7 @@ The current implementation focuses on a practical CAE workflow:
 
 ## Status
 
-This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Multi-layer soil parameter grouping and full seismic wave input for layered free fields are planned work.
+This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Layered soil boundary grouping is implemented for common horizontal layered models by reading adjacent boundary element materials. Full seismic wave input for layered free fields remains planned work.
 
 ## Supported Environment
 
@@ -36,13 +37,27 @@ Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v1` in the plugin
 1. Open or create a soil model in Abaqus/CAE.
 2. Ensure the soil part has elastic and density material properties.
 3. Open the StaticDynamic plugin dialog.
-4. Set model name, soil part, soil instance, and vertical axis.
+4. Set model name, soil part, soil instance, and vertical axis (`X`, `Y`, or `Z`).
 5. Choose one of the workflows:
    - node set only
    - geostatic equilibrium plus viscous-spring boundary
    - full dynamic workflow
 6. Run the plugin.
 7. Inspect generated assembly sets and visual `SpringDashpotToGround` features.
+8. Open the geostatic ODB and check the final-frame displacement field `U`.
+
+## Geostatic Balance Input
+
+The plugin does not compute geostatic balance internally. Complete geostatic
+balance first, verify that the final displacement field `U` is acceptable, and
+then provide the balanced reaction source to this plugin:
+
+- `ODB`: read boundary node `RF` from the specified step in a balanced ODB.
+- `CSV`: read boundary node reactions from a CSV file with columns
+  `nodeLabel, RF1, RF2, RF3` or the same four columns without a header.
+
+This keeps staged construction, contact, excavation, tunnels, piles, and other
+complex soil-structure balance workflows outside the boundary-conversion plugin.
 
 ## Boundary Logic
 
@@ -58,7 +73,9 @@ For a 2D planar model, artificial boundaries are applied to:
 - left edge
 - right edge
 
-Top free surfaces are not treated as artificial boundaries.
+Top free surfaces are not treated as artificial boundaries. After a run, the
+viewport is automatically oriented so the selected vertical axis is displayed
+upright; this changes only the view, not the model coordinates.
 
 ## Nodal Weighting
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Added layered-soil viscous-spring boundary grouping by adjacent boundary element material.
+- Added a horizontal cell-layer fallback for section assignments stored on geometry cells.
+- Added split material contributions for boundary nodes located on layer interfaces.
+- Added X/Y/Z vertical-axis selection and automatic viewport orientation.
+- Skipped zero-magnitude reaction-balance nodal loads to avoid Abaqus load creation errors.
+- Replaced internal geostatic-run mode with external ODB/CSV geostatic reaction inputs.
+
 ## 0.1.0 - 2026-05-25
 
 - Added Abaqus/CAE GUI plugin scaffold.

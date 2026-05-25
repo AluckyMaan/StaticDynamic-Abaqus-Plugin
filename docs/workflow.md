@@ -10,11 +10,10 @@ The plugin currently follows this sequence:
 4. Detect artificial boundary faces or edges.
 5. Create a visible boundary node set.
 6. If spring-damping is enabled:
-   - create or reuse a geostatic step
-   - temporarily constrain boundary nodes
-   - submit a geostatic job
-   - read boundary reaction forces from the ODB
-   - remove temporary constraints
+   - choose a geostatic reaction source: ODB or CSV
+   - `ODB`: read boundary reactions from the final frame of the selected step
+     in a balanced ODB
+   - `CSV`: read boundary reactions from `nodeLabel, RF1, RF2, RF3`
    - apply weighted visual viscous-spring boundaries
    - apply equivalent reaction-balance nodal loads
 7. If seismic load is enabled:
@@ -28,7 +27,7 @@ The plugin currently follows this sequence:
 The GUI enables and disables parameter groups according to selected functions:
 
 - Node set only: model and node-set options are active.
-- Spring damping: geostatic and job resource parameters are active.
+- Spring damping: geostatic ODB/CSV source options are active.
 - Seismic load: dynamic parameters and wave file options are active.
 
 ## Validation Checklist

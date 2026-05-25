@@ -21,7 +21,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
          cpuNum=4, gpuNum=0, initialJobName='',
          NodeSet=True, NodeInfo=False,
          SpringDamping=False, SeismicLoad=False,
-         fileName='', autoSubmit=False):
+         fileName='', autoSubmit=False,
+         geostaticFileType='ODB', geostaticFile=''):
     print('=== Static-Dynamic Analysis v1.0 ===')
     print('Function: %s, Model: %s, Soil: %s' %
           (functionOption, Model_name, soilInstance_name))
@@ -51,25 +52,31 @@ def Main(functionOption='Seismic', Model_name='Model-1',
     boundary_faces = get_boundary_node_faces(
         model, instance, soilSet, verticalAxis, model_dimension)
     boundary_nodes = _unique_nodes_from_faces(boundary_faces)
+    node_params = build_boundary_node_params(
+        model, soilPart_name, boundary_nodes, depth, params, verticalAxis)
 
     if NodeSet:
         create_boundary_node_set(model, instance, boundary_nodes, NodeInfo)
 
     reaction_forces = {}
     if SpringDamping:
-        setup_geostatic_equilibrium(model, instance, boundary_nodes, verticalAxis,
-                                    stepName, d_time, iterationsNum, saveNum,
-                                    model_dimension)
-        geo_job_name = run_geostatic_equilibrium_job(
-            model, initialJobName, cpuNum, gpuNum)
-        reaction_forces = read_boundary_reactions(
-            geo_job_name, instance, boundary_nodes, stepName)
-        remove_geostatic_temporary_constraints(model)
+        geostatic_file = geostaticFile
+        geostatic_source = normalize_geostatic_file_type(geostaticFileType)
+        if geostatic_source == 'ODB':
+            reaction_forces = read_boundary_reactions_from_odb(
+                geostatic_file, instance, boundary_nodes, stepName)
+        else:
+            reaction_forces = read_boundary_reactions_from_csv(
+                geostatic_file, boundary_nodes)
         apply_viscous_spring_boundary(
             model, instance, boundary_faces, params, verticalAxis,
-            model_dimension)
-        apply_reaction_balance_loads(
-            model, instance, reaction_forces, stepName, model_dimension)
+            model_dimension, node_params)
+        if reaction_forces:
+            ensure_reaction_balance_step(model, stepName)
+            apply_reaction_balance_loads(
+                model, instance, reaction_forces, stepName, model_dimension)
+        else:
+            print('Skipped reaction-balance loads.')
 
     wave_data = None
     if SeismicLoad and functionOption == 'Seismic':
@@ -90,6 +97,7 @@ def Main(functionOption='Seismic', Model_name='Model-1',
     else:
         print('Skipped final job creation.')
 
+    orient_view_to_vertical_axis(model, instance, verticalAxis)
     print('=== Static-Dynamic Analysis Complete ===')
 
 
@@ -146,6 +154,13 @@ def parse_theta(theta_str):
         return [0.0, 1.0, 0.0]
 
 
+def normalize_geostatic_file_type(file_type):
+    text = str(file_type or '').strip().upper()
+    if text == 'CSV':
+        return 'CSV'
+    return 'ODB'
+
+
 def get_material_properties(model, part_name):
     part = model.parts[part_name] if part_name in model.parts.keys() else None
     if part is None:
@@ -154,13 +169,16 @@ def get_material_properties(model, part_name):
     material_name = None
     if part.sectionAssignments:
         section_name = part.sectionAssignments[0].sectionName
-        section = model.sections[section_name]
-        material_name = getattr(section, 'material', None)
+        material_name = _section_material_name(model, section_name)
     if not material_name and model.materials:
         material_name = model.materials.keys()[0]
     if not material_name:
         raise ValueError('No material found for part "%s".' % part_name)
 
+    return get_material_properties_by_name(model, material_name)
+
+
+def get_material_properties_by_name(model, material_name, verbose=True):
     material = model.materials[material_name]
     elastic = material.elastic.table[0]
     density = material.density.table[0][0]
@@ -172,12 +190,13 @@ def get_material_properties(model, part_name):
     Vp = math.sqrt((lam + 2.0 * G) / rho)
     Vs = math.sqrt(G / rho)
 
-    print('Extracted material properties from: %s' % material_name)
+    if verbose:
+        print('Extracted material properties from: %s' % material_name)
     return {'E': E, 'nu': nu, 'rho': rho, 'G': G, 'lambda': lam,
-            'Vp': Vp, 'Vs': Vs}
+            'Vp': Vp, 'Vs': Vs, 'material': material_name}
 
 
-def compute_boundary_params(mat_props, depth):
+def compute_boundary_params(mat_props, depth, verbose=True):
     R = float(depth) if float(depth) > 0.0 else 1.0
     params = {
         'K_normal': mat_props['E'] / (2.0 * R),
@@ -186,18 +205,307 @@ def compute_boundary_params(mat_props, depth):
         'C_shear': mat_props['rho'] * mat_props['Vs'],
         'Vp': mat_props['Vp'],
         'Vs': mat_props['Vs'],
+        'material': mat_props.get('material', 'Material'),
     }
-    print('Boundary Parameters:')
-    print('  K_normal = %.2f, K_shear = %.2f' %
-          (params['K_normal'], params['K_shear']))
-    print('  C_normal = %.2f, C_shear = %.2f' %
-          (params['C_normal'], params['C_shear']))
-    print('  Vp = %.2f, Vs = %.2f' % (params['Vp'], params['Vs']))
+    if verbose:
+        print('Boundary Parameters:')
+        print('  Material = %s' % params['material'])
+        print('  K_normal = %.2f, K_shear = %.2f' %
+              (params['K_normal'], params['K_shear']))
+        print('  C_normal = %.2f, C_shear = %.2f' %
+              (params['C_normal'], params['C_shear']))
+        print('  Vp = %.2f, Vs = %.2f' % (params['Vp'], params['Vs']))
     return params
+
+
+def _section_material_name(model, section_name):
+    if section_name not in model.sections.keys():
+        return None
+    section = model.sections[section_name]
+    return getattr(section, 'material', None)
+
+
+def _resolve_region(region, part=None):
+    if isinstance(region, tuple) and region and isinstance(region[0], str):
+        region_name = region[0]
+        for container_name in ('sets', 'allInternalSets'):
+            try:
+                container = getattr(part, container_name)
+                if region_name in container.keys():
+                    return container[region_name]
+            except Exception:
+                pass
+    return region
+
+
+def _region_elements(region, part=None):
+    region = _resolve_region(region, part)
+    try:
+        return list(region.elements)
+    except Exception:
+        return []
+
+
+def _region_cells(region, part=None):
+    region = _resolve_region(region, part)
+    try:
+        return list(region.cells)
+    except Exception:
+        return []
+
+
+def _element_node_labels(elem):
+    try:
+        return [node.label for node in elem.getNodes()]
+    except Exception:
+        try:
+            return list(elem.connectivity)
+        except Exception:
+            return []
+
+
+def _element_centroid(elem, node_coords_by_label):
+    labels = _element_node_labels(elem)
+    coords = [node_coords_by_label[label]
+              for label in labels if label in node_coords_by_label]
+    if not coords:
+        return None
+    return tuple(sum(coord[i] for coord in coords) / float(len(coords))
+                 for i in range(3))
+
+
+def _cell_point(cell):
+    try:
+        point = cell.pointOn[0]
+    except Exception:
+        return None
+    if len(point) == 2:
+        return (point[0], point[1], 0.0)
+    if len(point) < 3:
+        return tuple(list(point) + [0.0] * (3 - len(point)))
+    return point
+
+
+def _cluster_layer_points(layer_points):
+    if not layer_points:
+        return []
+    ordered = sorted(layer_points, key=lambda item: item[0])
+    span = ordered[-1][0] - ordered[0][0]
+    tol = max(1.0e-9, abs(span) * 1.0e-8)
+    clusters = []
+    for value, material_name in ordered:
+        if not clusters or abs(value - clusters[-1][-1][0]) > tol:
+            clusters.append([(value, material_name)])
+        else:
+            clusters[-1].append((value, material_name))
+
+    result = []
+    for cluster in clusters:
+        center = sum(item[0] for item in cluster) / float(len(cluster))
+        counts = {}
+        for _, material_name in cluster:
+            counts[material_name] = counts.get(material_name, 0) + 1
+        result.append((center, _dominant_material(counts)))
+    return result
+
+
+def _material_from_layer_centers(value, layer_centers):
+    if not layer_centers:
+        return None
+    if len(layer_centers) == 1:
+        return layer_centers[0][1]
+    for i in range(len(layer_centers) - 1):
+        boundary = 0.5 * (layer_centers[i][0] + layer_centers[i + 1][0])
+        if value <= boundary:
+            return layer_centers[i][1]
+    return layer_centers[-1][1]
+
+
+def _cell_layer_element_materials(model, part, assignments, vertical_axis):
+    vertical_idx = _axis_index(vertical_axis)
+    layer_points = []
+    for assignment in assignments:
+        material_name = _section_material_name(model, assignment.sectionName)
+        if not material_name:
+            continue
+        for cell in _region_cells(assignment.region, part):
+            point = _cell_point(cell)
+            if point is not None:
+                layer_points.append((float(point[vertical_idx]), material_name))
+
+    layer_centers = _cluster_layer_points(layer_points)
+    if not layer_centers:
+        return {}
+
+    node_coords_by_label = dict((node.label, _node_coords(node))
+                                for node in part.nodes)
+    elem_material = {}
+    for elem in part.elements:
+        centroid = _element_centroid(elem, node_coords_by_label)
+        if centroid is None:
+            continue
+        material_name = _material_from_layer_centers(
+            centroid[vertical_idx], layer_centers)
+        if material_name:
+            elem_material[elem.label] = material_name
+
+    if elem_material:
+        print('Layered boundary grouping uses section cell positions along %s.' %
+              str(vertical_axis).upper())
+        for center, material_name in layer_centers:
+            print('  Layer center %.6g -> %s' % (center, material_name))
+    return elem_material
+
+
+def _part_element_materials(model, part, vertical_axis):
+    elem_material = {}
+    assignments = list(part.sectionAssignments)
+    if not assignments:
+        return elem_material
+
+    for assignment in assignments:
+        material_name = _section_material_name(model, assignment.sectionName)
+        if not material_name:
+            continue
+        elements = _region_elements(assignment.region, part)
+        for elem in elements:
+            elem_material[elem.label] = material_name
+
+    if not elem_material:
+        elem_material = _cell_layer_element_materials(
+            model, part, assignments, vertical_axis)
+
+    if not elem_material and len(assignments) == 1:
+        material_name = _section_material_name(model, assignments[0].sectionName)
+        if material_name:
+            for elem in part.elements:
+                elem_material[elem.label] = material_name
+
+    if not elem_material and assignments:
+        material_name = _section_material_name(model, assignments[0].sectionName)
+        if material_name:
+            print('Warning: could not map section regions to mesh elements; '
+                  'using first section material "%s" for boundary nodes.' %
+                  material_name)
+            for elem in part.elements:
+                elem_material[elem.label] = material_name
+
+    return elem_material
+
+
+def _node_material_counts(part, elem_material):
+    counts_by_node = {}
+    for elem in part.elements:
+        material_name = elem_material.get(elem.label)
+        if not material_name:
+            continue
+        for node_label in _element_node_labels(elem):
+            counts = counts_by_node.setdefault(node_label, {})
+            counts[material_name] = counts.get(material_name, 0) + 1
+    return counts_by_node
+
+
+def _dominant_material(material_counts):
+    if not material_counts:
+        return None
+    items = sorted(material_counts.items(), key=lambda item: (-item[1], item[0]))
+    return items[0][0]
+
+
+def build_boundary_node_params(model, part_name, boundary_nodes, depth,
+                               fallback_params, vertical_axis='Y'):
+    part = model.parts[part_name] if part_name in model.parts.keys() else None
+    if part is None:
+        return {}
+
+    elem_material = _part_element_materials(model, part, vertical_axis)
+    if not elem_material:
+        print('Layered boundary grouping skipped: no element-material map found.')
+        return {}
+
+    counts_by_node = _node_material_counts(part, elem_material)
+    params_by_material = {}
+    node_params = {}
+    material_weight_summary = {}
+    split_nodes = 0
+    fallback_material = fallback_params.get('material', 'Material')
+
+    for node in boundary_nodes:
+        material_counts = counts_by_node.get(node.label, {})
+        if not material_counts:
+            material_counts = {fallback_material: 1}
+        total = float(sum(material_counts.values()))
+        entries = []
+        if len(material_counts) > 1:
+            split_nodes += 1
+        for material_name in sorted(material_counts.keys()):
+            if material_name not in params_by_material:
+                if material_name in model.materials.keys():
+                    props = get_material_properties_by_name(
+                        model, material_name, verbose=False)
+                    params_by_material[material_name] = compute_boundary_params(
+                        props, depth, verbose=False)
+                else:
+                    params_by_material[material_name] = fallback_params
+            fraction = material_counts[material_name] / total
+            entries.append((params_by_material[material_name], fraction))
+            material_weight_summary[material_name] = \
+                material_weight_summary.get(material_name, 0.0) + fraction
+        node_params[node.label] = entries
+
+    print('Layered boundary material groups:')
+    for material_name in sorted(material_weight_summary.keys()):
+        params = params_by_material[material_name]
+        print('  %s: equivalent_nodes=%.2f, Vp=%.2f, Vs=%.2f' %
+              (material_name, material_weight_summary[material_name],
+               params['Vp'], params['Vs']))
+    if split_nodes:
+        print('  Interface boundary nodes split by adjacent material counts: %d' %
+              split_nodes)
+    return node_params
 
 
 def _axis_index(vertical_axis):
     return {'X': 0, 'Y': 1, 'Z': 2}.get(str(vertical_axis).upper(), 1)
+
+
+def orient_view_to_vertical_axis(model, instance=None, vertical_axis='Y'):
+    try:
+        viewport_name = session.currentViewportName
+        viewport = session.viewports[viewport_name]
+    except Exception:
+        return
+
+    try:
+        viewport.setValues(displayedObject=model.rootAssembly)
+    except Exception:
+        pass
+
+    try:
+        axis = str(vertical_axis).upper()
+        up_vectors = {
+            'X': (1.0, 0.0, 0.0),
+            'Y': (0.0, 1.0, 0.0),
+            'Z': (0.0, 0.0, 1.0),
+        }
+        view_vectors = {
+            'X': (-0.6, 1.0, -1.0),
+            'Y': (-1.0, 0.6, -1.0),
+            'Z': (-1.0, 1.0, 0.6),
+        }
+        up = up_vectors.get(axis, up_vectors['Y'])
+        view_vector = view_vectors.get(axis, view_vectors['Y'])
+        viewport.view.setViewpoint(
+            viewVector=view_vector,
+            cameraUpVector=up)
+        viewport.view.fitView()
+        print('Viewport oriented with %s as vertical axis.' % axis)
+    except Exception as e:
+        print('Warning: failed to orient viewport: %s' % e)
+        try:
+            viewport.view.fitView()
+        except Exception:
+            pass
 
 
 def _node_coords(node):
@@ -444,67 +752,23 @@ def create_boundary_node_set(model, instance, nodes, export_info=False):
         print('Node info exported to: %s' % path)
 
 
-def setup_geostatic_equilibrium(model, instance, nodes, vertical_axis,
-                                step_name, d_time, iterations_num, save_num,
-                                model_dimension='3D'):
-    if step_name not in model.steps.keys():
-        model.GeostaticStep(name=step_name, previous='Initial',
-                            maxNumInc=int(iterations_num),
-                            initialInc=float(d_time), nlgeom=OFF)
-        print('Created step: %s (Geostatic)' % step_name)
-
-    _ensure_rf_field_output(model, step_name, save_num)
-    assembly = model.rootAssembly
-    set_name = 'SD_GeoTempBoundary'
-    if set_name in assembly.sets.keys():
-        del assembly.sets[set_name]
-    assembly.Set(name=set_name, nodes=_assembly_nodes_from_labels(instance, nodes))
-    region = assembly.sets[set_name]
-
-    bc_name = 'SD_GeoTempFix'
-    if bc_name in model.boundaryConditions.keys():
-        del model.boundaryConditions[bc_name]
-    if model_dimension == '2D':
-        model.DisplacementBC(name=bc_name, createStepName='Initial',
-                             region=region, u1=SET, u2=SET, u3=UNSET,
-                             ur1=UNSET, ur2=UNSET, ur3=UNSET)
-    else:
-        model.DisplacementBC(name=bc_name, createStepName='Initial',
-                             region=region, u1=SET, u2=SET, u3=SET,
-                             ur1=UNSET, ur2=UNSET, ur3=UNSET)
-    print('Temporary geostatic boundary fixed %d nodes.' % len(nodes))
-
-
-def _ensure_rf_field_output(model, step_name, save_num):
-    if 'SD_RF_Output' in model.fieldOutputRequests.keys():
-        del model.fieldOutputRequests['SD_RF_Output']
-    model.FieldOutputRequest(name='SD_RF_Output', createStepName=step_name,
-                             variables=('RF', 'U'), frequency=int(save_num))
-
-
-def run_geostatic_equilibrium_job(model, initial_job_name, cpu_num, gpu_num):
-    job_name = (initial_job_name or model.name + '_Job') + '_Geo'
-    job = create_analysis_job(model, job_name, cpu_num, gpu_num,
-                              'Geostatic equilibrium for boundary reactions',
-                              replace=True)
-    job.submit(consistencyChecking=OFF)
-    print('Geostatic job "%s" submitted.' % job_name)
-    job.waitForCompletion()
-    print('Geostatic job "%s" finished with status: %s' %
-          (job_name, mdb.jobs[job_name].status))
-    return job_name
-
-
-def read_boundary_reactions(job_name, instance, nodes, step_name):
-    odb_path = job_name + '.odb'
+def read_boundary_reactions_from_odb(odb_path, instance, nodes, step_name):
+    if not odb_path:
+        raise ValueError('Geostatic ODB file is required.')
     if not os.path.isfile(odb_path):
-        odb_path = os.path.abspath(odb_path)
+        raise ValueError('Geostatic ODB file not found: %s' % odb_path)
     odb = session.openOdb(name=odb_path, readOnly=True)
     reactions = {}
     target_labels = set([node.label for node in nodes])
     try:
+        if step_name not in odb.steps.keys():
+            raise ValueError('Step "%s" not found in ODB "%s".' %
+                             (step_name, odb_path))
         step = odb.steps[step_name]
         frame = step.frames[-1]
+        if 'RF' not in frame.fieldOutputs.keys():
+            raise ValueError('RF field output not found in ODB "%s", step "%s".' %
+                             (odb_path, step_name))
         rf = frame.fieldOutputs['RF']
         inst_name = instance.name.upper()
         for value in rf.values:
@@ -517,39 +781,126 @@ def read_boundary_reactions(job_name, instance, nodes, step_name):
     for node in nodes:
         if node.label not in reactions:
             reactions[node.label] = (0.0, 0.0, 0.0)
-    print('Read geostatic RF for %d boundary nodes.' % len(reactions))
+    print('Read geostatic RF for %d boundary nodes from: %s' %
+          (len(reactions), odb_path))
     return reactions
 
 
-def remove_geostatic_temporary_constraints(model):
-    for name in ('SD_GeoTempFix',):
-        if name in model.boundaryConditions.keys():
-            del model.boundaryConditions[name]
-    print('Temporary geostatic constraints removed.')
+def read_boundary_reactions_from_csv(csv_path, nodes):
+    if not csv_path:
+        raise ValueError('Geostatic CSV file is required.')
+    if not os.path.isfile(csv_path):
+        raise ValueError('Geostatic CSV file not found: %s' % csv_path)
+
+    target_labels = set([node.label for node in nodes])
+    reactions = {}
+    header_map = None
+    f = open(csv_path, 'rb')
+    try:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row:
+                continue
+            cells = [str(item).strip() for item in row]
+            if not cells or not cells[0] or cells[0].startswith('#'):
+                continue
+            if header_map is None:
+                lower = [item.lower() for item in cells]
+                if ('nodelabel' in lower or 'node_label' in lower or
+                        'label' in lower or 'node' in lower):
+                    header_map = _reaction_csv_header_map(lower)
+                    continue
+                header_map = {'label': 0, 'rf1': 1, 'rf2': 2, 'rf3': 3}
+            try:
+                label = int(float(cells[header_map['label']]))
+                if label not in target_labels:
+                    continue
+                rf1 = _csv_float(cells, header_map.get('rf1'))
+                rf2 = _csv_float(cells, header_map.get('rf2'))
+                rf3 = _csv_float(cells, header_map.get('rf3'))
+                reactions[label] = (rf1, rf2, rf3)
+            except Exception:
+                continue
+    finally:
+        f.close()
+
+    missing = 0
+    for node in nodes:
+        if node.label not in reactions:
+            reactions[node.label] = (0.0, 0.0, 0.0)
+            missing += 1
+    print('Read geostatic RF for %d boundary nodes from CSV: %s (missing filled as zero: %d)' %
+          (len(reactions), csv_path, missing))
+    return reactions
+
+
+def _reaction_csv_header_map(lower_header):
+    candidates = {
+        'label': ('nodelabel', 'node_label', 'label', 'node'),
+        'rf1': ('rf1', 'rfx', 'cf1', 'fx'),
+        'rf2': ('rf2', 'rfy', 'cf2', 'fy'),
+        'rf3': ('rf3', 'rfz', 'cf3', 'fz'),
+    }
+    result = {}
+    for key, names in candidates.items():
+        for name in names:
+            if name in lower_header:
+                result[key] = lower_header.index(name)
+                break
+    if 'label' not in result:
+        result['label'] = 0
+    if 'rf1' not in result:
+        result['rf1'] = 1
+    if 'rf2' not in result:
+        result['rf2'] = 2
+    if 'rf3' not in result:
+        result['rf3'] = 3
+    return result
+
+
+def _csv_float(cells, index):
+    if index is None or index >= len(cells):
+        return 0.0
+    try:
+        return float(cells[index])
+    except Exception:
+        return 0.0
+
+
+def ensure_reaction_balance_step(model, step_name):
+    if step_name in model.steps.keys():
+        return
+    model.StaticStep(name=step_name, previous='Initial', nlgeom=OFF)
+    print('Created reaction-balance target step: %s' % step_name)
 
 
 def apply_reaction_balance_loads(model, instance, reactions, step_name,
                                  model_dimension='3D'):
     count = 0
+    skipped = 0
     for label, rf in reactions.items():
-        node = instance.nodes.sequenceFromLabels(labels=(label,))[0]
-        region = _node_region(instance, node)
         name = 'SD_RF_%d' % label
         if name in model.loads.keys():
             del model.loads[name]
         cf1 = -rf[0] if len(rf) > 0 else 0.0
         cf2 = -rf[1] if len(rf) > 1 else 0.0
         cf3 = -rf[2] if model_dimension != '2D' and len(rf) > 2 else 0.0
+        if max(abs(cf1), abs(cf2), abs(cf3)) <= 1.0e-12:
+            skipped += 1
+            continue
+        node = instance.nodes.sequenceFromLabels(labels=(label,))[0]
+        region = _node_region(instance, node)
         model.ConcentratedForce(name=name, createStepName=step_name,
                                 region=region, cf1=cf1, cf2=cf2,
                                 cf3=cf3, distributionType=UNIFORM,
                                 field='', localCsys=None)
         count += 1
-    print('Applied equivalent geostatic RF nodal loads: %d' % count)
+    print('Applied equivalent geostatic RF nodal loads: %d (skipped zero RF: %d)' %
+          (count, skipped))
 
 
 def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
-                                  model_dimension='3D'):
+                                  model_dimension='3D', node_params=None):
     assembly = model.rootAssembly
     ef = assembly.engineeringFeatures
 
@@ -587,12 +938,12 @@ def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
             continue
         active_faces += 1
         shear_dofs = [d for d in active_dofs if d != normal_dof]
-        specs = [('Normal', normal_dof, params['K_normal'], params['C_normal'])]
+        specs = [('Normal', normal_dof, 'K_normal', 'C_normal')]
         if model_dimension == '2D':
-            specs.append(('Shear', shear_dofs[0], params['K_shear'], params['C_shear']))
+            specs.append(('Shear', shear_dofs[0], 'K_shear', 'C_shear'))
         else:
-            specs.append(('Shear1', shear_dofs[0], params['K_shear'], params['C_shear']))
-            specs.append(('Shear2', shear_dofs[1], params['K_shear'], params['C_shear']))
+            specs.append(('Shear1', shear_dofs[0], 'K_shear', 'C_shear'))
+            specs.append(('Shear2', shear_dofs[1], 'K_shear', 'C_shear'))
 
         face_set = 'SD_VS_Face_%s' % face_name
         assembly.Set(name=face_set,
@@ -606,19 +957,27 @@ def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
                    'length' if model_dimension == '2D' else 'area',
                    min(values), max(values), sum(values)))
 
-        for comp_name, dof, base_stiffness, base_dashpot in specs:
+        for comp_name, dof, stiffness_key, dashpot_key in specs:
             grouped = {}
             for node in face_nodes:
-                influence = weights.get(node.label, 1.0)
-                stiffness = influence * base_stiffness
-                dashpot = influence * base_dashpot
-                key = ('%.12g' % stiffness, '%.12g' % dashpot)
-                grouped.setdefault(key, []).append(node)
+                local_entries = [(params, 1.0)]
+                if node_params and node.label in node_params:
+                    local_entries = node_params[node.label]
+                    if isinstance(local_entries, dict):
+                        local_entries = [(local_entries, 1.0)]
+                for local_params, material_fraction in local_entries:
+                    influence = weights.get(node.label, 1.0) * material_fraction
+                    stiffness = influence * local_params[stiffness_key]
+                    dashpot = influence * local_params[dashpot_key]
+                    material_name = local_params.get('material', 'Material')
+                    key = ('%.12g' % stiffness, '%.12g' % dashpot, material_name)
+                    grouped.setdefault(key, []).append(node)
 
             for index, key in enumerate(sorted(grouped.keys()), 1):
                 group_nodes = grouped[key]
                 stiffness = float(key[0])
                 dashpot = float(key[1])
+                material_name = key[2]
                 group_set = 'SD_VS_Group_%s_%s_%03d' % (
                     face_name, comp_name, index)
                 assembly.Set(
@@ -637,8 +996,8 @@ def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
                     dashpotBehavior=ON,
                     dashpotCoefficient=dashpot)
                 created_groups += 1
-                print('Created visual SpringDashpotToGround: %s DOF=%d nodes=%d A*K=%.6g A*C=%.6g' %
-                      (feature_name, dof, len(group_nodes), stiffness, dashpot))
+                print('Created visual SpringDashpotToGround: %s material=%s DOF=%d nodes=%d A*K=%.6g A*C=%.6g' %
+                      (feature_name, material_name, dof, len(group_nodes), stiffness, dashpot))
 
     boundary_kind = 'edges' if model_dimension == '2D' else 'faces'
     print('Visual viscous-spring boundary applied to %d unique nodes on %d %s (%d weighted groups).' %

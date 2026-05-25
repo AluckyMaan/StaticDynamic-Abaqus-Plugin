@@ -15,6 +15,8 @@ ID_NODE_INFO_CHK = _ID_BASE + 31
 ID_SPRING_DAMP_CHK = _ID_BASE + 32
 ID_SEISMIC_CHK = _ID_BASE + 33
 ID_AUTO_SUBMIT_CHK = _ID_BASE + 34
+ID_GEOSTATIC_FILE_BROWSE = _ID_BASE + 35
+ID_GEOSTATIC_SOURCE = _ID_BASE + 36
 
 
 def _debug_log(message):
@@ -35,6 +37,8 @@ class StaticDynamicForm(AFXForm):
         self.depthKw = AFXFloatKeyword(self.cmd, 'depth', True, 0.0)
         self.verticalAxisKw = AFXStringKeyword(self.cmd, 'verticalAxis', True, 'Y')
         self.geoTypeKw = AFXStringKeyword(self.cmd, 'geoType', True, 'CSV')
+        self.geostaticFileTypeKw = AFXStringKeyword(self.cmd, 'geostaticFileType', True, 'ODB')
+        self.geostaticFileKw = AFXStringKeyword(self.cmd, 'geostaticFile', True, '')
         self.functionOptionKw = AFXStringKeyword(self.cmd, 'functionOption', True, 'Seismic')
         self.stepTypeKw = AFXStringKeyword(self.cmd, 'stepType', True, 'Implicit')
         self.stepNameKw = AFXStringKeyword(self.cmd, 'stepName', True, 'Step-geo')
@@ -77,6 +81,10 @@ class StaticDynamicForm(AFXForm):
             return False
         if seismic and not node_set:
             _err('Seismic Load requires Node Set Establishment.')
+            return False
+        geostatic_file = self.geostaticFileKw.getValue()
+        if spring and (not geostatic_file or not os.path.isfile(geostatic_file)):
+            _err('Spring Damping requires a valid geostatic ODB or CSV file.')
             return False
         return True
 
@@ -142,9 +150,27 @@ class StaticDynamicDialog(AFXDataDialog):
         FXLabel(row, 'Vertical Axis:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
         self.verticalAxisCmb = AFXComboBox(row, 10, 2, '', form.verticalAxisKw, 0,
                                            LAYOUT_FILL_X)
+        self.verticalAxisCmb.appendItem('X')
         self.verticalAxisCmb.appendItem('Y')
         self.verticalAxisCmb.appendItem('Z')
-        self.verticalAxisCmb.setCurrentItem(0)
+        self.verticalAxisCmb.setCurrentItem(1)
+
+        row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
+        FXLabel(row, 'Geostatic Source:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
+        self.geostaticSourceCmb = AFXComboBox(
+            row, 10, 2, '', form.geostaticFileTypeKw,
+            ID_GEOSTATIC_SOURCE, LAYOUT_FILL_X)
+        self.geostaticSourceCmb.appendItem('ODB')
+        self.geostaticSourceCmb.appendItem('CSV')
+        self.geostaticSourceCmb.setCurrentItem(0)
+
+        row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
+        FXLabel(row, 'Geostatic File:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
+        self.geostaticFileTxt = AFXTextField(row, 24, '', form.geostaticFileKw, 0,
+                                             AFXTEXTFIELD_STRING | LAYOUT_FILL_X)
+        self.geostaticFileBtn = FXButton(row, 'Browse...', None, self,
+                                         ID_GEOSTATIC_FILE_BROWSE,
+                                         BUTTON_NORMAL | LAYOUT_CENTER_Y)
 
         row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
         FXLabel(row, 'Geometry Type:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
@@ -257,6 +283,8 @@ class StaticDynamicDialog(AFXDataDialog):
         self.autoSubmitChk = FXCheckButton(chk_row3, 'Auto Submit Final Job', self, ID_AUTO_SUBMIT_CHK)
 
         FXMAPFUNC(self, SEL_COMMAND, ID_FILE_BROWSE, self.onBrowseFile)
+        FXMAPFUNC(self, SEL_COMMAND, ID_GEOSTATIC_FILE_BROWSE, self.onBrowseGeostaticFile)
+        FXMAPFUNC(self, SEL_COMMAND, ID_GEOSTATIC_SOURCE, self.onGeostaticSource)
         FXMAPFUNC(self, SEL_COMMAND, ID_NODE_SET_CHK, self.onNodeSetChk)
         FXMAPFUNC(self, SEL_COMMAND, ID_NODE_INFO_CHK, self.onNodeInfoChk)
         FXMAPFUNC(self, SEL_COMMAND, ID_SPRING_DAMP_CHK, self.onSpringDampChk)
@@ -265,11 +293,24 @@ class StaticDynamicDialog(AFXDataDialog):
 
         self.fileHandler = StaticDynamicDBFileHandler(
             self, self.fileTxt, self.fileBtn, self.fileTxt)
+        self.geostaticFileHandler = StaticDynamicDBFileHandler(
+            self, self.geostaticFileTxt, self.geostaticFileBtn,
+            self.geostaticFileTxt, fileKeyword=form.geostaticFileKw,
+            title='Select Geostatic File',
+            patterns='Geostatic Files (*.odb, *.csv);;ODB Files (*.odb);;CSV Files (*.csv);;All Files (*)')
         FXHorizontalSeparator(self, SEPARATOR_GROOVE | LAYOUT_FILL_X)
         self._update_option_states()
 
     def onBrowseFile(self, sender, sel, ptr, data=None):
         self.fileHandler.activate()
+
+    def onBrowseGeostaticFile(self, sender, sel, ptr, data=None):
+        self.geostaticFileHandler.activate()
+
+    def onGeostaticSource(self, sender, sel, ptr, data=None):
+        self.owner.geostaticFileTypeKw.setValue(
+            self.geostaticSourceCmb.getText())
+        self._update_option_states()
 
     def _is_checked(self, widget):
         try:
@@ -343,13 +384,10 @@ class StaticDynamicDialog(AFXDataDialog):
         self._set_enabled([self.seismicChk], node_set and spring)
 
         geostatic_widgets = [
+            self.geostaticSourceCmb,
+            self.geostaticFileTxt,
+            self.geostaticFileBtn,
             self.stepNameTxt,
-            self.dTimeSpin,
-            self.iterSpin,
-            self.saveSpin,
-            self.cpuSpin,
-            self.gpuSpin,
-            self.jobTxt,
         ]
         dynamic_widgets = [
             self.funcOptionCmb,
@@ -357,6 +395,12 @@ class StaticDynamicDialog(AFXDataDialog):
             self.waveCmb,
             self.thetaTxt,
             self.tTimeSpin,
+            self.dTimeSpin,
+            self.iterSpin,
+            self.saveSpin,
+            self.cpuSpin,
+            self.gpuSpin,
+            self.jobTxt,
             self.geoTypeCmb,
             self.fileTxt,
             self.fileBtn,

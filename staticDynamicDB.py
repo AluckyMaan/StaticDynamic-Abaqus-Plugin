@@ -50,6 +50,8 @@ class StaticDynamicDB(object):
             'depth': form.depthSpin.getValue(),
             'verticalAxis': form.verticalAxisCmb.getText(),
             'geoType': form.geoTypeCmb.getText(),
+            'geostaticFileType': form.geostaticSourceCmb.getText(),
+            'geostaticFile': form.geostaticFileTxt.getText(),
             'stepType': form.stepTypeCmb.getText(),
             'stepName': form.stepNameTxt.getText(),
             'wave111': form.waveCmb.getText(),
@@ -72,24 +74,28 @@ class StaticDynamicDB(object):
 
 
 class StaticDynamicDBFileHandler(object):
-    def __init__(self, form, fileTextField, fileButton, patternTarget):
+    def __init__(self, form, fileTextField, fileButton, patternTarget,
+                 fileKeyword=None, title='Select Wave File',
+                 patterns=None):
         self.form = form
         self.fileTextField = fileTextField
         self.fileButton = fileButton
         self.patternTarget = patternTarget
+        self.fileKeyword = fileKeyword
+        self.title = title
         self.fileName = ''
-        self.patterns = ['Wave Files (*.csv, *.xlsx)']
+        self.patterns = patterns or (
+            'Wave Files (*.csv, *.xlsx);;CSV Files (*.csv);;'
+            'Excel Files (*.xlsx);;All Files (*)')
 
     def activate(self):
         from abaqusGui import AFXFileSelectorDialog, AFXSELECTFILE_EXISTING
 
-        file_kw = self.form.owner.fileNameKw
+        file_kw = self.fileKeyword or self.form.owner.fileNameKw
         dialog = AFXFileSelectorDialog(
-            self.form, 'Select Wave File', file_kw, None,
+            self.form, self.title, file_kw, None,
             AFXSELECTFILE_EXISTING)
-        dialog.setReadOnlyPatterns(
-            'Wave Files (*.csv, *.xlsx);;CSV Files (*.csv);;'
-            'Excel Files (*.xlsx);;All Files (*)')
+        dialog.setReadOnlyPatterns(self.patterns)
         dialog.create()
         dialog.showModal()
         self.fileName = file_kw.getValue()

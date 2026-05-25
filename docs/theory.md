@@ -53,4 +53,10 @@ Each edge receives one normal and one shear component.
 
 ## Layered Soil
 
-Layered soil requires material-dependent boundary parameters. The current public version does not yet group boundary nodes by layer material. For layered soil, a future implementation should infer material properties from adjacent boundary elements or user-provided layer definitions.
+Layered soil requires material-dependent boundary parameters on the artificial boundary. The plugin now builds a node-to-material map from adjacent boundary elements and computes `K_normal`, `K_shear`, `C_normal`, and `C_shear` from the material assigned to each boundary node.
+
+When a boundary node lies on a layer interface and is adjacent to elements from more than one material, the nodal tributary contribution is split by adjacent material counts. The resulting `SpringDashpotToGround` components are additive on the same node and degree of freedom, so the interface node receives a weighted contribution from each neighboring layer instead of being forced into only one material group.
+
+For section assignments that are available directly on mesh elements, the element material map is used without geometric inference. For common horizontal layered models whose section assignments are stored on geometric cells, the plugin falls back to a layer-position inference: each section cell's `pointOn` coordinate is read along the selected vertical axis, element centroids are classified into the corresponding layer interval, and boundary nodes inherit the dominant material of their adjacent elements.
+
+This solves the artificial-boundary parameter mismatch for layered soil truncation. Internal reflection and transmission at layer interfaces are still governed by the finite-element model itself; the viscous-spring boundary is applied only to the truncated external faces or edges. Oblique or strongly irregular material zones should still be validated against a benchmark model because the cell-position fallback assumes horizontal layering.
