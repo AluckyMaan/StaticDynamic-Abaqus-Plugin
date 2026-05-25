@@ -12,7 +12,7 @@ The plugin currently follows this sequence:
 6. If spring-damping is enabled:
    - choose a geostatic reaction source: ODB or CSV
    - `ODB`: read boundary reactions from the final frame of the selected step
-     in a balanced ODB
+     in a balanced ODB after checking the final-frame `U` tolerance
    - `CSV`: read boundary reactions from `nodeLabel, RF1, RF2, RF3`
    - apply weighted visual viscous-spring boundaries
    - apply equivalent reaction-balance nodal loads
@@ -35,6 +35,7 @@ The GUI enables and disables parameter groups according to selected functions:
 For a regular 3D box, confirm:
 
 - five boundary faces are detected
+- `BoundaryInfo.csv` lists face names, material fractions, and tributary weights
 - bottom face area equals model plan area
 - each side face area equals side geometry area
 - generated `SD_VisualVS_*` features exist

@@ -1,5 +1,9 @@
 # StaticDynamic Abaqus Plugin
 
+[中文说明](README.zh-CN.md)
+
+Current version: `0.2.0`
+
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
 The current implementation focuses on a practical CAE workflow:
@@ -30,7 +34,7 @@ Copy this repository folder into an Abaqus plugin search path, for example:
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v1` in the plugin menu.
+Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.2.0` in the plugin menu.
 
 ## Basic Workflow
 
@@ -53,11 +57,19 @@ balance first, verify that the final displacement field `U` is acceptable, and
 then provide the balanced reaction source to this plugin:
 
 - `ODB`: read boundary node `RF` from the specified step in a balanced ODB.
+  The plugin checks the final-frame displacement field `U` before conversion;
+  the default tolerance is `1.0e-4`.
 - `CSV`: read boundary node reactions from a CSV file with columns
   `nodeLabel, RF1, RF2, RF3` or the same four columns without a header.
+  CSV input cannot verify displacement balance, so the user must ensure the
+  source model is already balanced.
 
 This keeps staged construction, contact, excavation, tunnels, piles, and other
 complex soil-structure balance workflows outside the boundary-conversion plugin.
+
+When `Node Information` is enabled, the plugin exports `BoundaryInfo.csv` with
+node coordinates, boundary face name, material fractions, and tributary area or
+length. This file can be used to build or audit external geostatic reaction CSVs.
 
 ## Boundary Logic
 

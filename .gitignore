@@ -25,6 +25,7 @@ __pycache__/
 # Local/debug files
 dialog_debug.log
 NodeInfo.csv
+BoundaryInfo.csv
 SD_*_check*.txt
 SD_*_probe*.txt
 SD_*_path.txt

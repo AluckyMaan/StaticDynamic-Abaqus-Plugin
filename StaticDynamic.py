@@ -11,6 +11,8 @@ from caeModules import *
 import regionToolset
 import staticDynamicDB
 
+__version__ = '0.2.0'
+
 
 def Main(functionOption='Seismic', Model_name='Model-1',
          soilInstance_name='soil-1', soilPart_name='soil',
@@ -22,8 +24,9 @@ def Main(functionOption='Seismic', Model_name='Model-1',
          NodeSet=True, NodeInfo=False,
          SpringDamping=False, SeismicLoad=False,
          fileName='', autoSubmit=False,
-         geostaticFileType='ODB', geostaticFile=''):
-    print('=== Static-Dynamic Analysis v1.0 ===')
+         geostaticFileType='ODB', geostaticFile='',
+         balanceTolerance=1.0e-4):
+    print('=== Static-Dynamic Analysis v%s ===' % __version__)
     print('Function: %s, Model: %s, Soil: %s' %
           (functionOption, Model_name, soilInstance_name))
 
@@ -56,16 +59,26 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         model, soilPart_name, boundary_nodes, depth, params, verticalAxis)
 
     if NodeSet:
-        create_boundary_node_set(model, instance, boundary_nodes, NodeInfo)
+        create_boundary_node_set(model, instance, boundary_nodes, False)
+    if NodeInfo:
+        export_boundary_info_csv(
+            model, instance, boundary_faces, node_params,
+            verticalAxis, model_dimension)
 
     reaction_forces = {}
     if SpringDamping:
         geostatic_file = geostaticFile
         geostatic_source = normalize_geostatic_file_type(geostaticFileType)
         if geostatic_source == 'ODB':
+            if not check_geostatic_balance_from_odb(
+                    geostatic_file, instance, stepName, balanceTolerance):
+                print('Error: Geostatic balance check failed; boundary conversion stopped.')
+                return
             reaction_forces = read_boundary_reactions_from_odb(
                 geostatic_file, instance, boundary_nodes, stepName)
         else:
+            print('Warning: CSV reaction input cannot verify displacement balance; '
+                  'ensure the source model satisfies the geostatic tolerance.')
             reaction_forces = read_boundary_reactions_from_csv(
                 geostatic_file, boundary_nodes)
         apply_viscous_spring_boundary(
@@ -750,6 +763,91 @@ def create_boundary_node_set(model, instance, nodes, export_info=False):
             writer.writerow([node.label] + list(node.coordinates))
         f.close()
         print('Node info exported to: %s' % path)
+
+
+def export_boundary_info_csv(model, instance, boundary_faces, node_params,
+                             vertical_axis, model_dimension='3D'):
+    path = os.path.join(os.path.dirname(__file__), 'BoundaryInfo.csv')
+    material_by_node = {}
+    weight_by_face = {}
+    for face_name, face_nodes in boundary_faces.items():
+        weights = _node_boundary_weights(
+            face_nodes, face_name, vertical_axis, model_dimension)
+        weight_by_face[face_name] = weights
+        for node in face_nodes:
+            entries = node_params.get(node.label, [])
+            materials = []
+            for params, fraction in entries:
+                materials.append('%s:%.6g' %
+                                 (params.get('material', 'Material'), fraction))
+            material_by_node[(face_name, node.label)] = '|'.join(materials)
+
+    f = open(path, 'wb')
+    try:
+        writer = csv.writer(f)
+        writer.writerow([
+            'nodeLabel', 'x', 'y', 'z', 'faceName',
+            'materialFractions', 'areaOrLength'
+        ])
+        for face_name in sorted(boundary_faces.keys()):
+            weights = weight_by_face.get(face_name, {})
+            for node in sorted(boundary_faces[face_name],
+                               key=lambda item: item.label):
+                coords = _node_coords(node)
+                writer.writerow([
+                    node.label, coords[0], coords[1], coords[2], face_name,
+                    material_by_node.get((face_name, node.label), ''),
+                    weights.get(node.label, 1.0)
+                ])
+    finally:
+        f.close()
+    print('Boundary info exported to: %s' % path)
+
+
+def check_geostatic_balance_from_odb(odb_path, instance, step_name,
+                                     tolerance=1.0e-4):
+    if not odb_path:
+        raise ValueError('Geostatic ODB file is required.')
+    if not os.path.isfile(odb_path):
+        raise ValueError('Geostatic ODB file not found: %s' % odb_path)
+
+    odb = session.openOdb(name=odb_path, readOnly=True)
+    try:
+        if step_name not in odb.steps.keys():
+            raise ValueError('Step "%s" not found in ODB "%s".' %
+                             (step_name, odb_path))
+        frame = odb.steps[step_name].frames[-1]
+        if 'U' not in frame.fieldOutputs.keys():
+            raise ValueError('U field output not found in ODB "%s", step "%s".' %
+                             (odb_path, step_name))
+        if 'RF' not in frame.fieldOutputs.keys():
+            raise ValueError('RF field output not found in ODB "%s", step "%s".' %
+                             (odb_path, step_name))
+
+        inst_name = instance.name.upper()
+        max_u = 0.0
+        max_label = None
+        count = 0
+        for value in frame.fieldOutputs['U'].values:
+            if value.instance.name.upper() != inst_name:
+                continue
+            count += 1
+            squared = 0.0
+            for item in value.data:
+                squared += float(item) * float(item)
+            magnitude = math.sqrt(squared)
+            if magnitude > max_u:
+                max_u = magnitude
+                max_label = value.nodeLabel
+
+        if count == 0:
+            raise ValueError('No U values found for instance "%s" in ODB "%s".' %
+                             (instance.name, odb_path))
+        print('Geostatic balance check: Umax=%.6g at node %s, tolerance=%.6g' %
+              (max_u, str(max_label), float(tolerance)))
+        return max_u <= float(tolerance)
+    finally:
+        odb.close()
 
 
 def read_boundary_reactions_from_odb(odb_path, instance, nodes, step_name):

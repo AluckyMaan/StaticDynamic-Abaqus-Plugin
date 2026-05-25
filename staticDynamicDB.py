@@ -52,6 +52,7 @@ class StaticDynamicDB(object):
             'geoType': form.geoTypeCmb.getText(),
             'geostaticFileType': form.geostaticSourceCmb.getText(),
             'geostaticFile': form.geostaticFileTxt.getText(),
+            'balanceTolerance': form.balanceTolSpin.getValue(),
             'stepType': form.stepTypeCmb.getText(),
             'stepName': form.stepNameTxt.getText(),
             'wave111': form.waveCmb.getText(),

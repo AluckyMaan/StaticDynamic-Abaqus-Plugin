@@ -39,6 +39,7 @@ class StaticDynamicForm(AFXForm):
         self.geoTypeKw = AFXStringKeyword(self.cmd, 'geoType', True, 'CSV')
         self.geostaticFileTypeKw = AFXStringKeyword(self.cmd, 'geostaticFileType', True, 'ODB')
         self.geostaticFileKw = AFXStringKeyword(self.cmd, 'geostaticFile', True, '')
+        self.balanceToleranceKw = AFXFloatKeyword(self.cmd, 'balanceTolerance', True, 1.0e-4)
         self.functionOptionKw = AFXStringKeyword(self.cmd, 'functionOption', True, 'Seismic')
         self.stepTypeKw = AFXStringKeyword(self.cmd, 'stepType', True, 'Implicit')
         self.stepNameKw = AFXStringKeyword(self.cmd, 'stepName', True, 'Step-geo')
@@ -171,6 +172,12 @@ class StaticDynamicDialog(AFXDataDialog):
         self.geostaticFileBtn = FXButton(row, 'Browse...', None, self,
                                          ID_GEOSTATIC_FILE_BROWSE,
                                          BUTTON_NORMAL | LAYOUT_CENTER_Y)
+
+        row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
+        FXLabel(row, 'Balance Tol:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
+        self.balanceTolSpin = AFXFloatSpinner(row, 10, '', form.balanceToleranceKw, 0)
+        self.balanceTolSpin.setRange(0.0, 1.0e3)
+        self.balanceTolSpin.setValue(1.0e-4)
 
         row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
         FXLabel(row, 'Geometry Type:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
@@ -387,6 +394,7 @@ class StaticDynamicDialog(AFXDataDialog):
             self.geostaticSourceCmb,
             self.geostaticFileTxt,
             self.geostaticFileBtn,
+            self.balanceTolSpin,
             self.stepNameTxt,
         ]
         dynamic_widgets = [
