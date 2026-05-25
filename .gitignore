@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Abaqus generated files
+*.cae
+*.jnl
+*.odb
+*.dat
+*.msg
+*.sta
+*.sim
+*.prt
+*.com
+*.lck
+*.inp
+*.log
+*.rpy
+*.rec
+*.res
+*.fil
+*.sel
+*.stt
+
+# Local/debug files
+dialog_debug.log
+NodeInfo.csv
+SD_*_check*.txt
+SD_*_probe*.txt
+SD_*_path.txt
+
+# Editor and agent metadata
+.idea/
+.vscode/
+.codex/
+.claude/
