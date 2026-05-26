@@ -30,6 +30,15 @@ face or edge, soil material contribution, and tributary area or length.
   <img src="docs/assets/v0.2.0-static-dynamic-workflow.svg" alt="StaticDynamic program workflow: boundary detection, geostatic reaction input, balance check, layered grouping, boundary conversion" width="900">
 </p>
 
+### GUI Workflow
+
+The Abaqus/CAE dialog keeps the model setup, geostatic reaction source,
+dynamic-analysis parameters, and optional output controls in one workflow.
+
+<p align="center">
+  <img src="docs/assets/staticdynamic-plugin-gui.png" alt="StaticDynamic Abaqus plugin GUI dialog" width="760">
+</p>
+
 ### Boundary Application Examples
 
 Captured directly from Abaqus/CAE with the generated `SpringDashpotToGround`
