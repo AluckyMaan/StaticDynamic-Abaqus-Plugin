@@ -46,3 +46,23 @@ sample validation models. It checks:
 
 The script is intentionally non-destructive: it does not submit jobs, open ODB
 files, or apply spring-dashpot features.
+
+## PEER wave data
+
+For seismic-input checks, select one PEER component file such as:
+
+```text
+RSN1547_CHICHI_TCU123-E.AT2
+```
+
+When matching `.VT2` and `.DT2` files exist beside it, the plugin loads all
+three records and converts:
+
+```text
+AT2 g -> model length / s^2
+VT2 cm/s -> model length / s
+DT2 cm -> model length
+```
+
+Set `Model Length Unit` to match the Abaqus model unit system before running
+the dynamic workflow.

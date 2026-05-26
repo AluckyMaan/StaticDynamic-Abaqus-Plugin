@@ -12,7 +12,7 @@ from caeModules import *
 import regionToolset
 import staticDynamicDB
 
-__version__ = '0.2.1'
+__version__ = '0.3.0'
 
 
 class StaticDynamicRunReport(object):
@@ -93,6 +93,24 @@ def _report_value(value):
         return repr(value)
 
 
+def _safe_log_text(value):
+    if value is None:
+        return ''
+    try:
+        return str(value)
+    except UnicodeEncodeError:
+        try:
+            escaped = value.encode('unicode_escape')
+            try:
+                return escaped.decode('ascii')
+            except Exception:
+                return escaped
+        except Exception:
+            return repr(value)
+    except Exception:
+        return repr(value)
+
+
 def _report_inputs(report, kwargs):
     for name in sorted(kwargs.keys()):
         report.add('Input', name, kwargs[name])
@@ -100,8 +118,10 @@ def _report_inputs(report, kwargs):
 
 def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                           NodeSet, NodeInfo, SpringDamping, SeismicLoad,
+                          function_option,
                           geostatic_file_type, geostatic_file, step_name,
-                          balance_tolerance, geo_type, wave_file, report):
+                          balance_tolerance, geo_type, wave_file,
+                          model_length_unit, report):
     errors = []
     warnings = []
 
@@ -113,6 +133,8 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
         errors.append('Spring Damping requires Node Set Establishment.')
     if SeismicLoad and not SpringDamping:
         errors.append('Seismic Load requires Spring Damping.')
+    if SeismicLoad and function_option != 'Seismic':
+        errors.append('Seismic Load requires Function Option = Seismic.')
 
     if part_name not in model.parts.keys():
         errors.append('Part "%s" not found in model "%s".' %
@@ -154,7 +176,15 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                 errors.append('Geostatic Source is CSV, but the selected file is not a .csv file.')
 
     if SeismicLoad and wave_file and not os.path.isfile(wave_file):
-        warnings.append('Wave file not found; plugin will search DIS/VEL/ACC files in the plugin folder.')
+        if not os.path.isdir(wave_file):
+            warnings.append('Wave file not found; plugin will search DIS/VEL/ACC files in the plugin folder.')
+
+    if SeismicLoad:
+        try:
+            staticDynamicDB._model_length_unit_scale(model_length_unit)
+        except Exception:
+            errors.append('Unsupported Model Length Unit "%s"; use m, cm, or mm.' %
+                          model_length_unit)
 
     for message in warnings:
         print('Warning: ' + message)
@@ -169,8 +199,9 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
 def Main(functionOption='Seismic', Model_name='Model-1',
          soilInstance_name='soil-1', soilPart_name='soil',
          soilSet='Set-soil', depth=0.0, verticalAxis='Y',
-         geoType='CSV', stepType='Implicit', stepName='Step-geo',
+         geoType='PEER', stepType='Implicit', stepName='Step-geo',
          wave111='P', theta_a='0,1,0',
+         modelLengthUnit='m',
          t_time=20.0, d_time=0.01, iterationsNum=20, saveNum=2,
          cpuNum=4, gpuNum=0, initialJobName='',
          NodeSet=True, NodeInfo=False,
@@ -192,6 +223,7 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         'stepName': stepName,
         'wave111': wave111,
         'theta_a': theta_a,
+        'modelLengthUnit': modelLengthUnit,
         't_time': t_time,
         'd_time': d_time,
         'iterationsNum': iterationsNum,
@@ -237,8 +269,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         errors, warnings = _validate_main_inputs(
             model, instance, soilPart_name, soilSet, depth,
             NodeSet, NodeInfo, SpringDamping, SeismicLoad,
-            geostaticFileType, geostaticFile, stepName,
-            balanceTolerance, geoType, fileName, report)
+            functionOption, geostaticFileType, geostaticFile, stepName,
+            balanceTolerance, geoType, fileName, modelLengthUnit, report)
         if errors:
             report.set_status('FAILED')
             report.write()
@@ -344,7 +376,16 @@ def Main(functionOption='Seismic', Model_name='Model-1',
 
         wave_data = None
         if SeismicLoad and functionOption == 'Seismic':
-            wave_data = load_wave_data(geoType, fileName, report=report)
+            wave_data = load_wave_data(
+                geoType, fileName, modelLengthUnit, report=report)
+            if wave_data is None:
+                message = 'Seismic Load is enabled, but no valid wave data was found.'
+                print('Error: ' + message)
+                report.add_message('ERROR', message)
+                report.set_status('FAILED')
+                report.write()
+                report_written = True
+                return
 
         if need_final_analysis:
             setup_steps(model, functionOption, stepName, stepType, t_time,
@@ -354,8 +395,10 @@ def Main(functionOption='Seismic', Model_name='Model-1',
             report.add('Analysis', 'final_step', 'skipped')
 
         if wave_data and SeismicLoad:
-            apply_seismic_load(model, instance, boundary_nodes, wave_data,
-                               wave111, theta, verticalAxis, report=report)
+            apply_seismic_load(
+                model, instance, boundary_faces, params, wave_data, wave111,
+                theta, verticalAxis, model_dimension, node_params,
+                report=report)
 
         if need_final_analysis:
             submit_job(model, initialJobName, cpuNum, gpuNum, autoSubmit,
@@ -1414,59 +1457,241 @@ def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
             'weighted_groups': created_groups}
 
 
-def load_wave_data(geo_type, file_path='', report=None):
+def _wave_kind_from_filename(path):
+    lower = os.path.basename(path).lower()
+    ext = os.path.splitext(lower)[1]
+    if ext == '.at2' or 'acc' in lower:
+        return 'acceleration'
+    if ext == '.vt2' or 'vel' in lower:
+        return 'velocity'
+    if ext == '.dt2' or 'dis' in lower or 'disp' in lower:
+        return 'displacement'
+    return 'velocity'
+
+
+def _series_meta(data, path, kind, source_unit='model units', scale=1.0):
+    dt = 0.0
+    if len(data) >= 2:
+        dt = float(data[1][0]) - float(data[0][0])
+    return {
+        'kind': kind,
+        'sourcePath': path,
+        'sourceUnit': source_unit,
+        'scale': scale,
+        'npts': len(data),
+        'dt': dt,
+    }
+
+
+def _add_motion_series(motion, kind, data, meta):
+    if not data:
+        return
+    motion[kind] = data
+    motion[kind + 'Meta'] = meta
+
+
+def _merge_motion(motion, source):
+    for kind in ('acceleration', 'velocity', 'displacement'):
+        if kind in source:
+            _add_motion_series(
+                motion, kind, source[kind],
+                source.get(kind + 'Meta', _series_meta(
+                    source[kind], source.get('selectedPath', ''), kind)))
+
+
+def _peer_or_tabular_wave_files(search_dir):
+    peer_first = staticDynamicDB.first_peer_file_in_directory(search_dir)
+    if peer_first:
+        return [peer_first]
+    files = []
+    for filename in os.listdir(search_dir):
+        lower = filename.lower()
+        if (lower.endswith('.csv') or lower.endswith('.xlsx') or
+                lower.endswith('.xls')):
+            if 'vel' in lower or 'dis' in lower or 'acc' in lower:
+                files.append(os.path.join(search_dir, filename))
+    files.sort()
+    return files
+
+
+def load_wave_data(geo_type, file_path='', model_length_unit='m', report=None):
     search_files = []
     if file_path:
-        if os.path.isfile(file_path):
+        if os.path.isdir(file_path):
+            search_files.extend(_peer_or_tabular_wave_files(file_path))
+        elif os.path.isfile(file_path):
             search_files.append(file_path)
         else:
-            print('Warning: wave file not found: %s' % file_path)
+            print('Warning: wave file not found: %s' %
+                  _safe_log_text(file_path))
 
     if not search_files:
         search_dir = os.path.dirname(__file__) or '.'
-        for filename in os.listdir(search_dir):
-            lower = filename.lower()
-            if lower.endswith('.csv') or lower.endswith('.xlsx') or lower.endswith('.xls'):
-                if 'vel' in lower or 'dis' in lower or 'acc' in lower:
-                    search_files.append(os.path.join(search_dir, filename))
+        search_files.extend(_peer_or_tabular_wave_files(search_dir))
 
-    result = {}
+    motion = {
+        'format': str(geo_type or '').upper(),
+        'modelLengthUnit': model_length_unit,
+    }
     for path in search_files:
-        lower = os.path.basename(path).lower()
         try:
-            data = staticDynamicDB.read_wave_data(path, geo_type)
+            data = staticDynamicDB.read_wave_data(
+                path, geo_type, model_length_unit)
         except Exception as e:
-            print('Warning: Failed to read wave file "%s": %s' % (path, e))
+            print('Warning: Failed to read wave file "%s": %s' %
+                  (_safe_log_text(path), _safe_log_text(e)))
+            if report is not None:
+                report.add_message(
+                    'WARNING', 'Failed to read wave file "%s": %s' %
+                    (_safe_log_text(path), _safe_log_text(e)))
             continue
+        if isinstance(data, dict):
+            _merge_motion(motion, data)
+            for kind in ('acceleration', 'velocity', 'displacement'):
+                if kind in data:
+                    meta = data.get(kind + 'Meta', {})
+                    print('Loaded PEER %s data: %s (%d points, %s -> model %s, scale %.6g)' %
+                          (kind, _safe_log_text(meta.get('sourcePath', path)),
+                           len(data[kind]), meta.get('sourceUnit', ''),
+                           model_length_unit, float(meta.get('scale', 1.0))))
+                    if report is not None:
+                        report.add('Wave', kind + '.file',
+                                   meta.get('sourcePath', path))
+                        report.add('Wave', kind + '.points', len(data[kind]))
+                        report.add('Wave', kind + '.source_unit',
+                                   meta.get('sourceUnit', ''))
+                        report.add('Wave', kind + '.scale',
+                                   meta.get('scale', 1.0))
+            continue
+
         if not data:
             continue
-        if 'acc' in lower:
-            result['acceleration'] = data
-            kind = 'acceleration'
-        elif 'vel' in lower:
-            result['velocity'] = data
-            kind = 'velocity'
-        elif 'dis' in lower:
-            result['displacement'] = data
-            kind = 'displacement'
-        else:
-            result['velocity'] = data
-            kind = 'velocity'
-        print('Loaded %s data: %s (%d points)' % (kind, path, len(data)))
+        kind = _wave_kind_from_filename(path)
+        _add_motion_series(
+            motion, kind, data,
+            _series_meta(data, path, kind, 'model units', 1.0))
+        print('Loaded %s data: %s (%d points)' %
+              (kind, _safe_log_text(path), len(data)))
         if report is not None:
             report.add('Wave', kind + '.file', path)
             report.add('Wave', kind + '.points', len(data))
 
-    if result.get('acceleration'):
-        return result['acceleration']
-    if result.get('velocity'):
-        return result['velocity']
-    if result.get('displacement'):
-        return result['displacement']
+    if any([kind in motion for kind in ('acceleration', 'velocity',
+                                        'displacement')]):
+        if report is not None:
+            report.add('Wave', 'model_length_unit', model_length_unit)
+        return motion
     print('Warning: no valid wave data found; seismic load skipped.')
     if report is not None:
         report.add_message('WARNING', 'No valid wave data found; seismic load skipped.')
     return None
+
+
+def _integrate_series(series):
+    if not series:
+        return []
+    result = [(series[0][0], 0.0)]
+    accum = 0.0
+    prev_t, prev_v = series[0]
+    for t, value in series[1:]:
+        dt = float(t) - float(prev_t)
+        accum += 0.5 * (float(prev_v) + float(value)) * dt
+        result.append((t, accum))
+        prev_t, prev_v = t, value
+    return result
+
+
+def _differentiate_series(series):
+    if len(series) < 2:
+        return []
+    result = []
+    for index, item in enumerate(series):
+        if index == 0:
+            t0, y0 = series[0]
+            t1, y1 = series[1]
+        elif index == len(series) - 1:
+            t0, y0 = series[-2]
+            t1, y1 = series[-1]
+        else:
+            t0, y0 = series[index - 1]
+            t1, y1 = series[index + 1]
+        dt = float(t1) - float(t0)
+        value = 0.0 if abs(dt) <= 1.0e-20 else (float(y1) - float(y0)) / dt
+        result.append((item[0], value))
+    return result
+
+
+def _prepare_motion_for_boundary_input(motion, report=None):
+    prepared = dict(motion)
+    if 'velocity' not in prepared:
+        if 'acceleration' in prepared:
+            prepared['velocity'] = _integrate_series(prepared['acceleration'])
+            prepared['velocityMeta'] = {
+                'sourcePath': 'integrated acceleration',
+                'sourceUnit': 'model length/s',
+                'scale': 1.0,
+                'npts': len(prepared['velocity']),
+                'dt': _series_meta(prepared['velocity'], '', 'velocity')['dt'],
+            }
+            if report is not None:
+                report.add('Wave', 'velocity.generated',
+                           'integrated acceleration')
+        elif 'displacement' in prepared:
+            prepared['velocity'] = _differentiate_series(
+                prepared['displacement'])
+            if report is not None:
+                report.add('Wave', 'velocity.generated',
+                           'differentiated displacement')
+
+    if 'displacement' not in prepared:
+        if 'velocity' in prepared:
+            prepared['displacement'] = _integrate_series(prepared['velocity'])
+            prepared['displacementMeta'] = {
+                'sourcePath': 'integrated velocity',
+                'sourceUnit': 'model length',
+                'scale': 1.0,
+                'npts': len(prepared['displacement']),
+                'dt': _series_meta(
+                    prepared['displacement'], '', 'displacement')['dt'],
+            }
+            if report is not None:
+                report.add('Wave', 'displacement.generated',
+                           'integrated velocity')
+
+    if 'velocity' not in prepared or 'displacement' not in prepared:
+        raise ValueError('Seismic input requires velocity and displacement data, or acceleration data that can be integrated.')
+    return prepared
+
+
+def _unit_vector(vector):
+    vals = [float(item) for item in vector]
+    mag = math.sqrt(sum([item * item for item in vals]))
+    if mag <= 1.0e-20:
+        return [0.0, 1.0, 0.0]
+    return [item / mag for item in vals]
+
+
+def _force_series(displacement, velocity, stiffness, dashpot, factor):
+    count = min(len(displacement), len(velocity))
+    data = []
+    max_abs = 0.0
+    for index in range(count):
+        t = displacement[index][0]
+        u = float(displacement[index][1])
+        v = float(velocity[index][1])
+        force = float(factor) * (float(stiffness) * u + float(dashpot) * v)
+        if abs(force) > max_abs:
+            max_abs = abs(force)
+        data.append((t, force))
+    return data, max_abs
+
+
+def _delete_prefixed_items(container, prefixes):
+    for name in list(container.keys()):
+        for prefix in prefixes:
+            if name.startswith(prefix):
+                del container[name]
+                break
 
 
 def setup_steps(model, function_option, step_name, step_type,
@@ -1502,25 +1727,115 @@ def set_field_outputs(model, save_num):
         request.setValues(frequency=int(save_num))
 
 
-def apply_seismic_load(model, instance, nodes, wave_data, wave_type, theta,
-                       vertical_axis, report=None):
+def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
+                       wave_type, theta, vertical_axis, model_dimension='3D',
+                       node_params=None, report=None):
     step_name = 'Step-dynamic'
     if step_name not in model.steps.keys():
         print('Warning: dynamic step not found; seismic load skipped.')
         if report is not None:
             report.add_message('WARNING', 'Dynamic step not found; seismic load skipped.')
         return
-    amp_name = 'SD_Wave_Amplitude'
-    if amp_name in model.amplitudes.keys():
-        del model.amplitudes[amp_name]
-    model.TabularAmplitude(name=amp_name, timeSpan=STEP, smooth=SOLVER_DEFAULT,
-                           data=tuple(wave_data))
-    print('Created seismic amplitude "%s" with %d points.' %
-          (amp_name, len(wave_data)))
+
+    motion = _prepare_motion_for_boundary_input(wave_data, report=report)
+    displacement = motion['displacement']
+    velocity = motion['velocity']
+    direction = _unit_vector(theta)
     if report is not None:
-        report.add('Wave', 'amplitude', amp_name)
-        report.add('Wave', 'amplitude_points', len(wave_data))
-        report.add('Wave', 'wave_type', wave_type)
+        report.add('SeismicInput', 'direction_unit_vector', direction)
+        report.add('SeismicInput', 'wave_type', wave_type)
+        report.add('SeismicInput', 'points',
+                   min(len(displacement), len(velocity)))
+
+    assembly = model.rootAssembly
+    _delete_prefixed_items(model.loads, ('SD_EQLoad_',))
+    _delete_prefixed_items(model.amplitudes, ('SD_EQAmp_', 'SD_Wave_Amplitude'))
+    _delete_prefixed_items(assembly.sets, ('SD_EQ_Group_',))
+
+    active_dofs = (1, 2) if model_dimension == '2D' else (1, 2, 3)
+    created_loads = 0
+    skipped_zero = 0
+    for face_name in sorted(boundary_faces.keys()):
+        face_nodes = boundary_faces[face_name]
+        if not face_nodes:
+            continue
+        normal_dof = _normal_dof_for_face(
+            face_name, vertical_axis, model_dimension)
+        if normal_dof not in active_dofs:
+            continue
+        shear_dofs = [d for d in active_dofs if d != normal_dof]
+        specs = [('Normal', normal_dof, 'K_normal', 'C_normal')]
+        if model_dimension == '2D':
+            specs.append(('Shear', shear_dofs[0], 'K_shear', 'C_shear'))
+        else:
+            specs.append(('Shear1', shear_dofs[0], 'K_shear', 'C_shear'))
+            specs.append(('Shear2', shear_dofs[1], 'K_shear', 'C_shear'))
+
+        weights = _node_boundary_weights(
+            face_nodes, face_name, vertical_axis, model_dimension)
+        for comp_name, dof, stiffness_key, dashpot_key in specs:
+            factor = direction[dof - 1]
+            if abs(factor) <= 1.0e-12:
+                continue
+            grouped = {}
+            for node in face_nodes:
+                local_entries = [(params, 1.0)]
+                if node_params and node.label in node_params:
+                    local_entries = node_params[node.label]
+                    if isinstance(local_entries, dict):
+                        local_entries = [(local_entries, 1.0)]
+                for local_params, material_fraction in local_entries:
+                    influence = weights.get(node.label, 1.0) * material_fraction
+                    stiffness = influence * local_params[stiffness_key]
+                    dashpot = influence * local_params[dashpot_key]
+                    material_name = local_params.get('material', 'Material')
+                    key = ('%.12g' % stiffness, '%.12g' % dashpot,
+                           material_name)
+                    grouped.setdefault(key, []).append(node)
+
+            for index, key in enumerate(sorted(grouped.keys()), 1):
+                group_nodes = grouped[key]
+                stiffness = float(key[0])
+                dashpot = float(key[1])
+                force_data, max_force = _force_series(
+                    displacement, velocity, stiffness, dashpot, factor)
+                if max_force <= 1.0e-20:
+                    skipped_zero += 1
+                    continue
+
+                group_set = 'SD_EQ_Group_%s_%s_%03d' % (
+                    face_name, comp_name, index)
+                assembly.Set(
+                    name=group_set,
+                    nodes=_assembly_nodes_from_labels(instance, group_nodes))
+                region = assembly.sets[group_set]
+
+                amp_name = 'SD_EQAmp_%s_%s_%03d' % (
+                    face_name, comp_name, index)
+                model.TabularAmplitude(
+                    name=amp_name, timeSpan=STEP, smooth=SOLVER_DEFAULT,
+                    data=tuple(force_data))
+
+                cf1 = 1.0 if dof == 1 else 0.0
+                cf2 = 1.0 if dof == 2 else 0.0
+                cf3 = 1.0 if dof == 3 else 0.0
+                load_name = 'SD_EQLoad_%s_%s_%03d' % (
+                    face_name, comp_name, index)
+                model.ConcentratedForce(
+                    name=load_name, createStepName=step_name,
+                    region=region, cf1=cf1, cf2=cf2, cf3=cf3,
+                    distributionType=UNIFORM, field='',
+                    localCsys=None, amplitude=amp_name)
+                created_loads += 1
+                print('Created seismic equivalent load: %s DOF=%d nodes=%d max|F|=%.6g' %
+                      (load_name, dof, len(group_nodes), max_force))
+
+    print('Created seismic equivalent boundary loads: %d (skipped zero groups: %d).' %
+          (created_loads, skipped_zero))
+    if report is not None:
+        report.add('SeismicInput', 'loads_created', created_loads)
+        report.add('SeismicInput', 'zero_groups_skipped', skipped_zero)
+    return {'loads_created': created_loads, 'zero_groups_skipped': skipped_zero}
 
 
 def create_analysis_job(model, job_name, cpu_num, gpu_num, description, replace=False):

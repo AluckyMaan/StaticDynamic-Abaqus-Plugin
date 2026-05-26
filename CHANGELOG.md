@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0 - 2026-05-26
+
+- Added PEER NGA strong-motion reader support for `.AT2`, `.VT2`, and `.DT2`
+  files.
+- Added PEER unit conversion for acceleration in `g`, velocity in `cm/s`, and
+  displacement in `cm` to the selected model length unit (`m`, `cm`, or `mm`).
+- Added automatic companion-file loading when one PEER component file is
+  selected.
+- Added equivalent seismic boundary nodal loads using
+  `F(t) = K_node * u_g(t) + C_node * v_g(t)` for each spring-dashpot group.
+- Added missing velocity/displacement generation by trapezoidal integration
+  when lower-order records are not provided.
+- Added GUI controls for `Wave Format = PEER` and `Model Length Unit`.
+- Added seismic input statistics to the run report.
+- Added preflight guards so seismic input requires `Function Option = Seismic`
+  and a valid wave record before final job creation.
+
 ## 0.2.1 - 2026-05-26
 
 - Added run preflight checks for function dependencies, model inputs, geostatic

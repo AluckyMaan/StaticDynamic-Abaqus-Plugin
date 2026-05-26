@@ -62,7 +62,8 @@ class StaticDynamicForm(AFXForm):
         self.soilSetKw = AFXStringKeyword(self.cmd, 'soilSet', True, 'Set-soil')
         self.depthKw = AFXFloatKeyword(self.cmd, 'depth', True, 0.0)
         self.verticalAxisKw = AFXStringKeyword(self.cmd, 'verticalAxis', True, 'Y')
-        self.geoTypeKw = AFXStringKeyword(self.cmd, 'geoType', True, 'CSV')
+        self.geoTypeKw = AFXStringKeyword(self.cmd, 'geoType', True, 'PEER')
+        self.modelLengthUnitKw = AFXStringKeyword(self.cmd, 'modelLengthUnit', True, 'm')
         self.geostaticFileTypeKw = AFXStringKeyword(self.cmd, 'geostaticFileType', True, 'ODB')
         self.geostaticFileKw = AFXStringKeyword(self.cmd, 'geostaticFile', True, '')
         self.balanceToleranceKw = AFXFloatKeyword(self.cmd, 'balanceTolerance', True, 1.0e-4)
@@ -108,6 +109,9 @@ class StaticDynamicForm(AFXForm):
             return False
         if seismic and not node_set:
             _err('Seismic Load requires Node Set Establishment.')
+            return False
+        if seismic and self.functionOptionKw.getValue() != 'Seismic':
+            _err('Seismic Load requires Function Option = Seismic.')
             return False
         geostatic_file = self.geostaticFileKw.getValue()
         if spring and (not geostatic_file or not os.path.isfile(geostatic_file)):
@@ -217,9 +221,10 @@ class StaticDynamicDialog(AFXDataDialog):
         self.balanceTolSpin.setValue(1.0e-4)
 
         row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
-        FXLabel(row, 'Geometry Type:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
+        FXLabel(row, 'Wave Format:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
         self.geoTypeCmb = AFXComboBox(row, 10, 2, '', form.geoTypeKw, 0,
                                       LAYOUT_FILL_X)
+        self.geoTypeCmb.appendItem('PEER')
         self.geoTypeCmb.appendItem('CSV')
         self.geoTypeCmb.appendItem('Excel')
         self.geoTypeCmb.setCurrentItem(0)
@@ -286,6 +291,15 @@ class StaticDynamicDialog(AFXDataDialog):
         self.thetaTxt = AFXTextField(row, 20, '', form.theta_aKw, 0,
                                      AFXTEXTFIELD_STRING | LAYOUT_FILL_X)
         self.thetaTxt.setText('0,1,0')
+
+        row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
+        FXLabel(row, 'Model Length Unit:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
+        self.modelLengthUnitCmb = AFXComboBox(
+            row, 10, 2, '', form.modelLengthUnitKw, 0, LAYOUT_FILL_X)
+        self.modelLengthUnitCmb.appendItem('m')
+        self.modelLengthUnitCmb.appendItem('cm')
+        self.modelLengthUnitCmb.appendItem('mm')
+        self.modelLengthUnitCmb.setCurrentItem(0)
 
         FXHorizontalSeparator(tab2, SEPARATOR_GROOVE | LAYOUT_FILL_X)
 
@@ -446,6 +460,7 @@ class StaticDynamicDialog(AFXDataDialog):
             self.stepTypeCmb,
             self.waveCmb,
             self.thetaTxt,
+            self.modelLengthUnitCmb,
             self.tTimeSpin,
             self.dTimeSpin,
             self.iterSpin,

@@ -20,8 +20,11 @@ The plugin currently follows this sequence:
    - apply weighted visual viscous-spring boundaries
    - apply equivalent reaction-balance nodal loads
 8. If seismic load is enabled:
-   - read wave data
+   - read wave data from PEER (`.AT2/.VT2/.DT2`), CSV, or Excel files
+   - convert PEER units into the selected model length unit
    - create the final analysis step
+   - create equivalent boundary input amplitudes and nodal loads from
+     `K_node * u_g(t) + C_node * v_g(t)`
    - create the final job
    - optionally submit the final job
 9. Write `StaticDynamic_run_report.txt` and `StaticDynamic_run_report.csv`.

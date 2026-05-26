@@ -2,7 +2,7 @@
 
 [English README](README.md)
 
-当前版本：`0.2.1`
+当前版本：`0.3.0`
 
 StaticDynamic 是一个 Abaqus/CAE Python 插件，用于土体静动力转换和粘弹性人工边界施加。当前版本重点支持复杂土-结构模型的外部地应力平衡结果导入，再由插件完成边界节点识别、反力读取、粘弹性边界施加和静力反力回填。
 
@@ -56,6 +56,8 @@ Abaqus/CAE 对话框将模型参数、地应力反力来源、动力分析参数
   - `CSV`：读取边界节点反力表。
 - ODB 输入时检查最后一帧位移场 `U`，默认容许值为 `1.0e-4`。
 - 导出 `BoundaryInfo.csv`，用于外部地应力反力表生成和核对。
+- 支持 PEER `.AT2/.VT2/.DT2` 地震动文件读取和单位转换。
+- 根据边界弹簧阻尼参数生成等效地震输入节点荷载。
 
 ## 适用思路
 
@@ -69,7 +71,7 @@ Abaqus/CAE 对话框将模型参数、地应力反力来源、动力分析参数
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.2.1`。
+重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.3.0`。
 
 ## 基本流程
 
@@ -82,9 +84,10 @@ C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
    - `ODB`
    - `CSV`
 7. 选择地应力文件和 step 名称。
-8. 勾选 `Node Set Establishment` 和 `Spring Damping`。
-9. 运行插件。
-10. 检查生成的节点集、`SpringDashpotToGround` 和 `SD_RF_*` 反力荷载。
+8. 若进行动力分析，选择 PEER 地震动文件，并设置 `Model Length Unit`。
+9. 勾选 `Node Set Establishment`、`Spring Damping` 和需要的 `Seismic Load`。
+10. 运行插件。
+11. 检查生成的节点集、`SpringDashpotToGround`、`SD_RF_*` 反力荷载和 `SD_EQLoad_*` 地震等效荷载。
 
 ## 地应力输入
 
@@ -129,6 +132,46 @@ nodeLabel,RF1,RF2,RF3
 ```
 
 CSV 方式无法检查位移场，用户需要自行保证地应力平衡已经满足要求。
+
+## 地震动输入
+
+第三版支持 PEER NGA 强震动文本文件：
+
+```text
+.AT2  加速度，PEER 常用单位为 g
+.VT2  速度，PEER 常用单位为 cm/s
+.DT2  位移，PEER 常用单位为 cm
+```
+
+在 `Wave File` 中选择任意一个分量文件，例如
+`RSN1547_CHICHI_TCU123-E.AT2`。若同目录下存在同名 `.VT2` 和 `.DT2`
+文件，插件会自动一起读取。
+
+`Model Length Unit` 必须与 Abaqus 模型长度单位一致，插件按以下方式换算：
+
+```text
+m   AT2 g -> m/s^2,  VT2 cm/s -> m/s,  DT2 cm -> m
+cm  AT2 g -> cm/s^2, VT2 cm/s -> cm/s, DT2 cm -> cm
+mm  AT2 g -> mm/s^2, VT2 cm/s -> mm/s, DT2 cm -> mm
+```
+
+对每组边界弹簧阻尼节点，插件在动力步中生成等效地震输入荷载：
+
+```text
+F(t) = K_node * u_g(t) + C_node * v_g(t)
+```
+
+其中 `u_g(t)` 和 `v_g(t)` 是换算到模型单位后的位移和速度时程。若只提供加速度或速度记录，插件会用梯形积分生成缺失的低阶时程。`Incident Vector` 用于控制全局输入方向，负号可用于反向输入。
+
+## 后续路线
+
+下一阶段按 `v0.4.0` 规划，重点优化更真实的地震波输入：
+
+- 入射波方向控制，不只使用统一全局向量。
+- 边界不同位置的到时差，考虑波沿底面和侧边界传播。
+- 场地反应前处理，支持基岩输入、自由场输入和土层放大关系。
+- PEER 地震波选择、调幅、单位和峰值检查流程。
+- 水平双分量和竖向分量组合输入的一致性检查。
 
 ## BoundaryInfo.csv
 
