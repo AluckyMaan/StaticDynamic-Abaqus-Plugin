@@ -32,15 +32,18 @@ face or edge, soil material contribution, and tributary area or length.
 
 ### Boundary Application Examples
 
+Captured directly from Abaqus/CAE with the generated `SpringDashpotToGround`
+features visible in the interaction display.
+
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/v0.2.0-layered-1m-viscous-boundary.png" alt="Layered soil model after viscous-spring boundary application" width="100%"><br>
-      <sub>Layered soil model after viscous-spring boundary application.</sub>
+      <img src="docs/assets/abaqus-interaction-viscous-boundary-readme.png" alt="Abaqus interaction view showing viscous-spring boundary symbols on a layered soil model" width="100%"><br>
+      <sub>Overall interaction view with visual viscous-spring boundary symbols.</sub>
     </td>
     <td width="50%" align="center">
-      <img src="docs/assets/v0.2.0-layered-1m-side-boundary.png" alt="Side boundary recognition on a layered soil model" width="100%"><br>
-      <sub>Side boundary recognition and layer interface grouping.</sub>
+      <img src="docs/assets/abaqus-interaction-side-boundary-readme.png" alt="Abaqus side view showing layered side boundary spring-dashpot symbols" width="100%"><br>
+      <sub>Side boundary detail with layered node grouping.</sub>
     </td>
   </tr>
 </table>
