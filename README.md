@@ -6,6 +6,10 @@ Current version: `0.2.0`
 
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
+<p align="center">
+  <img src="docs/assets/v0.2.0-release-hero.png" alt="StaticDynamic v0.2.0 layered viscous-spring boundary conversion" width="900">
+</p>
+
 The current implementation focuses on a practical CAE workflow:
 
 - identify 3D five-face artificial boundaries or 2D three-edge artificial boundaries
@@ -15,6 +19,31 @@ The current implementation focuses on a practical CAE workflow:
 - weight nodal spring-dashpot coefficients by tributary area or length
 - run geostatic equilibrium, read boundary reaction forces, and apply equivalent reaction-balance nodal loads
 - provide a GUI workflow for node-set generation, boundary application, and optional dynamic analysis setup
+
+## Visual Overview
+
+The plugin converts a balanced geostatic soil model into a dynamic model with
+weighted viscous-spring artificial boundaries. Boundary nodes are grouped by
+face or edge, soil material contribution, and tributary area or length.
+
+<p align="center">
+  <img src="docs/assets/v0.2.0-static-dynamic-workflow.svg" alt="StaticDynamic program workflow: boundary detection, geostatic reaction input, balance check, layered grouping, boundary conversion" width="900">
+</p>
+
+### Boundary Application Examples
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/v0.2.0-layered-1m-viscous-boundary.png" alt="Layered soil model after viscous-spring boundary application" width="100%"><br>
+      <sub>Layered soil model after viscous-spring boundary application.</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/v0.2.0-layered-1m-side-boundary.png" alt="Side boundary recognition on a layered soil model" width="100%"><br>
+      <sub>Side boundary recognition and layer interface grouping.</sub>
+    </td>
+  </tr>
+</table>
 
 ## Status
 

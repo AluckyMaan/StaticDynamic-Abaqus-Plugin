@@ -6,6 +6,33 @@
 
 StaticDynamic 是一个 Abaqus/CAE Python 插件，用于土体静动力转换和粘弹性人工边界施加。当前版本重点支持复杂土-结构模型的外部地应力平衡结果导入，再由插件完成边界节点识别、反力读取、粘弹性边界施加和静力反力回填。
 
+<p align="center">
+  <img src="docs/assets/v0.2.0-release-hero.png" alt="StaticDynamic v0.2.0 多层土粘弹性边界转换" width="900">
+</p>
+
+## 页面概览
+
+插件将已经完成地应力平衡的土体模型转换为带粘弹性人工边界的动力分析模型。程序会按边界面/边、相邻材料贡献和节点控制面积或长度，对边界节点进行分组和加权。
+
+<p align="center">
+  <img src="docs/assets/v0.2.0-static-dynamic-workflow.svg" alt="StaticDynamic 程序运行框图：边界识别、地应力反力输入、平衡检查、分层分组、边界转换" width="900">
+</p>
+
+### 粘弹性边界施加示例
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/v0.2.0-layered-1m-viscous-boundary.png" alt="多层土模型粘弹性边界施加结果" width="100%"><br>
+      <sub>多层土模型粘弹性边界施加结果。</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/v0.2.0-layered-1m-side-boundary.png" alt="多层土侧边界识别与层间界面分组" width="100%"><br>
+      <sub>侧边界识别与层间界面节点分组。</sub>
+    </td>
+  </tr>
+</table>
+
 ## 主要功能
 
 - 自动识别 3D 五个截断边界面，或 2D 三条截断边界边。
