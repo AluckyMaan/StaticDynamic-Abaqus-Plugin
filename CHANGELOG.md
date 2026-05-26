@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.1 - 2026-05-26
+
+- Added run preflight checks for function dependencies, model inputs, geostatic
+  file/source consistency, spring-damping depth, and balance tolerance.
+- Added `StaticDynamic_run_report.txt` and `StaticDynamic_run_report.csv` with
+  input, boundary, material, reaction, spring-dashpot, load, step, and job
+  summaries.
+- Added report statistics for boundary tributary weights, ODB balance checks,
+  CSV reaction gaps, spring-dashpot groups, and reaction-balance loads.
+- Updated the geostatic file browser to switch ODB/CSV filters from the selected
+  source and keep the text field, command keyword, and dialog cache in sync.
+- Compacted the lower-left GUI layout so the wave-file selector is visible on
+  high-DPI Abaqus/CAE dialogs.
+- Made dialog debug logging opt-in through `STATICDYNAMIC_DEBUG`.
+- Added `examples/validate_current_session.py` for lightweight Abaqus-session
+  boundary and tributary-weight validation.
+
 ## 0.2.0 - 2026-05-25
 
 - Added layered-soil viscous-spring boundary grouping by adjacent boundary element material.

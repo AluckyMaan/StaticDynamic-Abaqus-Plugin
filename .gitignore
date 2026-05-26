@@ -26,11 +26,14 @@ __pycache__/
 dialog_debug.log
 NodeInfo.csv
 BoundaryInfo.csv
+StaticDynamic_run_report.txt
+StaticDynamic_run_report.csv
 SD_*_check*.txt
 SD_*_probe*.txt
 SD_*_path.txt
 
 # Editor and agent metadata
+dist/
 .idea/
 .vscode/
 .codex/

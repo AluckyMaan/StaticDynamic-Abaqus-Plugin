@@ -2,7 +2,7 @@
 
 [English README](README.md)
 
-当前版本：`0.2.0`
+当前版本：`0.2.1`
 
 StaticDynamic 是一个 Abaqus/CAE Python 插件，用于土体静动力转换和粘弹性人工边界施加。当前版本重点支持复杂土-结构模型的外部地应力平衡结果导入，再由插件完成边界节点识别、反力读取、粘弹性边界施加和静力反力回填。
 
@@ -69,7 +69,7 @@ Abaqus/CAE 对话框将模型参数、地应力反力来源、动力分析参数
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.2.0`。
+重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.2.1`。
 
 ## 基本流程
 

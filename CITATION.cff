@@ -4,7 +4,7 @@ message: If you use this software, please cite it using the metadata from this f
 type: software
 authors:
   - family-names: AluckyMaan
-version: 0.2.0
-date-released: 2026-05-25
+version: 0.2.1
+date-released: 2026-05-26
 license: MIT
 repository-code: "https://github.com/AluckyMaan/StaticDynamic-Abaqus-Plugin"

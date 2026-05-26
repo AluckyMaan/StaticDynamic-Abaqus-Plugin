@@ -33,3 +33,16 @@ Each side total tributary area = 1200
 ```
 
 Screenshots and lightweight model-generation scripts can be added here in future releases.
+
+## Current-session validation
+
+`validate_current_session.py` can be run inside Abaqus/CAE after loading the
+sample validation models. It checks:
+
+- detected 2D/3D model dimension
+- active artificial boundary face or edge count
+- unique boundary-node count when an expected value is known
+- tributary area or length totals on each boundary face or edge
+
+The script is intentionally non-destructive: it does not submit jobs, open ODB
+files, or apply spring-dashpot features.

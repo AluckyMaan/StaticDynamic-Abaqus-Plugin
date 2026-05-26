@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import csv
+import datetime
 import math
 import os
 
@@ -11,8 +12,159 @@ from caeModules import *
 import regionToolset
 import staticDynamicDB
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
+
+class StaticDynamicRunReport(object):
+    def __init__(self, output_dir=None):
+        self.output_dir = output_dir or os.path.dirname(__file__) or '.'
+        self.started_at = datetime.datetime.now()
+        self.rows = []
+        self.status = 'STARTED'
+
+    def add(self, section, name, value='', note=''):
+        self.rows.append((
+            _report_value(section),
+            _report_value(name),
+            _report_value(value),
+            _report_value(note),
+        ))
+
+    def add_message(self, level, message):
+        self.add('Message', level, message)
+
+    def set_status(self, status):
+        self.status = str(status)
+
+    def write(self):
+        finished_at = datetime.datetime.now()
+        csv_path = os.path.join(self.output_dir, 'StaticDynamic_run_report.csv')
+        txt_path = os.path.join(self.output_dir, 'StaticDynamic_run_report.txt')
+
+        rows = [
+            ('Run', 'version', __version__, ''),
+            ('Run', 'started_at', self.started_at.strftime('%Y-%m-%d %H:%M:%S'), ''),
+            ('Run', 'finished_at', finished_at.strftime('%Y-%m-%d %H:%M:%S'), ''),
+            ('Run', 'status', self.status, ''),
+        ] + self.rows
+
+        f = open(csv_path, 'wb')
+        try:
+            writer = csv.writer(f)
+            writer.writerow(['section', 'name', 'value', 'note'])
+            for row in rows:
+                writer.writerow(list(row))
+        finally:
+            f.close()
+
+        f = open(txt_path, 'w')
+        try:
+            f.write('StaticDynamic Run Report\n')
+            f.write('Version: %s\n' % __version__)
+            f.write('Status: %s\n' % self.status)
+            f.write('Started: %s\n' %
+                    self.started_at.strftime('%Y-%m-%d %H:%M:%S'))
+            f.write('Finished: %s\n\n' %
+                    finished_at.strftime('%Y-%m-%d %H:%M:%S'))
+            current_section = None
+            for section, name, value, note in self.rows:
+                if section != current_section:
+                    current_section = section
+                    f.write('[%s]\n' % section)
+                line = '  %s: %s' % (name, value)
+                if note:
+                    line += ' (%s)' % note
+                f.write(line + '\n')
+        finally:
+            f.close()
+
+        print('Run report exported to: %s' % txt_path)
+        return csv_path, txt_path
+
+
+def _report_value(value):
+    if value is None:
+        return ''
+    if isinstance(value, float):
+        return '%.12g' % value
+    try:
+        return str(value)
+    except Exception:
+        return repr(value)
+
+
+def _report_inputs(report, kwargs):
+    for name in sorted(kwargs.keys()):
+        report.add('Input', name, kwargs[name])
+
+
+def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
+                          NodeSet, NodeInfo, SpringDamping, SeismicLoad,
+                          geostatic_file_type, geostatic_file, step_name,
+                          balance_tolerance, geo_type, wave_file, report):
+    errors = []
+    warnings = []
+
+    if not (NodeSet or NodeInfo or SpringDamping or SeismicLoad):
+        errors.append('Select at least one function option.')
+    if NodeInfo and not NodeSet:
+        errors.append('Node Information requires Node Set Establishment.')
+    if SpringDamping and not NodeSet:
+        errors.append('Spring Damping requires Node Set Establishment.')
+    if SeismicLoad and not SpringDamping:
+        errors.append('Seismic Load requires Spring Damping.')
+
+    if part_name not in model.parts.keys():
+        errors.append('Part "%s" not found in model "%s".' %
+                      (part_name, model.name))
+    if len(instance.nodes) == 0:
+        errors.append('Instance "%s" has no mesh nodes.' % instance.name)
+
+    try:
+        depth_value = float(depth)
+    except Exception:
+        depth_value = 0.0
+    if SpringDamping and depth_value <= 0.0:
+        errors.append('Structure Depth must be greater than 0 when Spring Damping is enabled.')
+
+    try:
+        tol_value = float(balance_tolerance)
+    except Exception:
+        tol_value = 0.0
+    if SpringDamping and tol_value <= 0.0:
+        errors.append('Balance Tol must be greater than 0 when Spring Damping is enabled.')
+
+    if soil_set_name and soil_set_name not in model.rootAssembly.sets.keys():
+        warnings.append('Soil set "%s" not found; boundary detection will use all instance nodes.' %
+                        soil_set_name)
+
+    source = normalize_geostatic_file_type(geostatic_file_type)
+    if SpringDamping:
+        if not step_name:
+            errors.append('Geostatic Step Name is required for Spring Damping.')
+        if not geostatic_file:
+            errors.append('A geostatic ODB or CSV file is required for Spring Damping.')
+        elif not os.path.isfile(geostatic_file):
+            errors.append('Geostatic file not found: %s' % geostatic_file)
+        else:
+            lower = geostatic_file.lower()
+            if source == 'ODB' and not lower.endswith('.odb'):
+                errors.append('Geostatic Source is ODB, but the selected file is not an .odb file.')
+            if source == 'CSV' and not lower.endswith('.csv'):
+                errors.append('Geostatic Source is CSV, but the selected file is not a .csv file.')
+
+    if SeismicLoad and wave_file and not os.path.isfile(wave_file):
+        warnings.append('Wave file not found; plugin will search DIS/VEL/ACC files in the plugin folder.')
+
+    for message in warnings:
+        print('Warning: ' + message)
+        report.add_message('WARNING', message)
+    for message in errors:
+        print('Error: ' + message)
+        report.add_message('ERROR', message)
+    report.add('Preflight', 'errors', len(errors))
+    report.add('Preflight', 'warnings', len(warnings))
+    return errors, warnings
 
 def Main(functionOption='Seismic', Model_name='Model-1',
          soilInstance_name='soil-1', soilPart_name='soil',
@@ -26,92 +178,204 @@ def Main(functionOption='Seismic', Model_name='Model-1',
          fileName='', autoSubmit=False,
          geostaticFileType='ODB', geostaticFile='',
          balanceTolerance=1.0e-4):
+    report = StaticDynamicRunReport()
+    input_kwargs = {
+        'functionOption': functionOption,
+        'Model_name': Model_name,
+        'soilInstance_name': soilInstance_name,
+        'soilPart_name': soilPart_name,
+        'soilSet': soilSet,
+        'depth': depth,
+        'verticalAxis': verticalAxis,
+        'geoType': geoType,
+        'stepType': stepType,
+        'stepName': stepName,
+        'wave111': wave111,
+        'theta_a': theta_a,
+        't_time': t_time,
+        'd_time': d_time,
+        'iterationsNum': iterationsNum,
+        'saveNum': saveNum,
+        'cpuNum': cpuNum,
+        'gpuNum': gpuNum,
+        'initialJobName': initialJobName,
+        'NodeSet': NodeSet,
+        'NodeInfo': NodeInfo,
+        'SpringDamping': SpringDamping,
+        'SeismicLoad': SeismicLoad,
+        'fileName': fileName,
+        'autoSubmit': autoSubmit,
+        'geostaticFileType': geostaticFileType,
+        'geostaticFile': geostaticFile,
+        'balanceTolerance': balanceTolerance,
+    }
+    _report_inputs(report, input_kwargs)
+
     print('=== Static-Dynamic Analysis v%s ===' % __version__)
     print('Function: %s, Model: %s, Soil: %s' %
           (functionOption, Model_name, soilInstance_name))
 
-    if SpringDamping and not NodeSet:
-        print('Error: Spring Damping requires Node Set Establishment.')
-        return
-    if SeismicLoad and not SpringDamping:
-        print('Error: Seismic Load requires Spring Damping.')
-        return
-    if SeismicLoad and not NodeSet:
-        print('Error: Seismic Load requires Node Set Establishment.')
-        return
+    report_written = False
+    try:
+        need_final_analysis = SeismicLoad
+        model = get_model(Model_name)
+        if model is None:
+            report.add_message('ERROR', 'Model "%s" not found.' % Model_name)
+            report.set_status('FAILED')
+            report.write()
+            report_written = True
+            return
+        instance = get_instance(model, soilInstance_name)
+        if instance is None:
+            report.add_message('ERROR', 'Instance "%s" not found.' %
+                               soilInstance_name)
+            report.set_status('FAILED')
+            report.write()
+            report_written = True
+            return
 
-    need_final_analysis = SeismicLoad
-    model = get_model(Model_name)
-    if model is None:
-        return
-    instance = get_instance(model, soilInstance_name)
-    if instance is None:
-        return
+        errors, warnings = _validate_main_inputs(
+            model, instance, soilPart_name, soilSet, depth,
+            NodeSet, NodeInfo, SpringDamping, SeismicLoad,
+            geostaticFileType, geostaticFile, stepName,
+            balanceTolerance, geoType, fileName, report)
+        if errors:
+            report.set_status('FAILED')
+            report.write()
+            report_written = True
+            return
 
-    model_dimension = get_model_dimension(model, soilPart_name, instance)
-    theta = parse_theta(theta_a)
-    mat_props = get_material_properties(model, soilPart_name)
-    params = compute_boundary_params(mat_props, depth)
-    boundary_faces = get_boundary_node_faces(
-        model, instance, soilSet, verticalAxis, model_dimension)
-    boundary_nodes = _unique_nodes_from_faces(boundary_faces)
-    node_params = build_boundary_node_params(
-        model, soilPart_name, boundary_nodes, depth, params, verticalAxis)
+        model_dimension = get_model_dimension(model, soilPart_name, instance)
+        report.add('Model', 'dimension', model_dimension)
+        theta = parse_theta(theta_a)
+        report.add('Model', 'incident_vector', theta)
 
-    if NodeSet:
-        create_boundary_node_set(model, instance, boundary_nodes, False)
-    if NodeInfo:
-        export_boundary_info_csv(
-            model, instance, boundary_faces, node_params,
-            verticalAxis, model_dimension)
+        boundary_faces = get_boundary_node_faces(
+            model, instance, soilSet, verticalAxis, model_dimension)
+        boundary_nodes = _unique_nodes_from_faces(boundary_faces)
+        report.add('Boundary', 'unique_nodes', len(boundary_nodes))
+        for face_name in sorted(boundary_faces.keys()):
+            face_nodes = boundary_faces[face_name]
+            weights = _node_boundary_weights(
+                face_nodes, face_name, verticalAxis, model_dimension)
+            total_weight = sum(weights.values()) if weights else 0.0
+            report.add('BoundaryFace', face_name + '.nodes', len(face_nodes))
+            report.add('BoundaryFace', face_name + '.total_weight',
+                       total_weight,
+                       'length' if model_dimension == '2D' else 'area')
+        if not boundary_nodes:
+            report.add_message('ERROR', 'No artificial boundary nodes found.')
+            report.set_status('FAILED')
+            report.write()
+            report_written = True
+            return
 
-    reaction_forces = {}
-    if SpringDamping:
-        geostatic_file = geostaticFile
-        geostatic_source = normalize_geostatic_file_type(geostaticFileType)
-        if geostatic_source == 'ODB':
-            if not check_geostatic_balance_from_odb(
-                    geostatic_file, instance, stepName, balanceTolerance):
-                print('Error: Geostatic balance check failed; boundary conversion stopped.')
-                return
-            reaction_forces = read_boundary_reactions_from_odb(
-                geostatic_file, instance, boundary_nodes, stepName)
+        params = None
+        node_params = {}
+        if SpringDamping or NodeInfo:
+            try:
+                mat_props = get_material_properties(model, soilPart_name)
+                params = compute_boundary_params(mat_props, depth)
+                node_params = build_boundary_node_params(
+                    model, soilPart_name, boundary_nodes, depth, params,
+                    verticalAxis)
+                report.add('Material', 'fallback', params.get('material', ''))
+                report.add('Material', 'Vp', params.get('Vp', ''))
+                report.add('Material', 'Vs', params.get('Vs', ''))
+                report.add('Material', 'node_param_entries', len(node_params))
+            except Exception as e:
+                message = 'Material and boundary parameter setup failed: %s' % e
+                if SpringDamping:
+                    print('Error: ' + message)
+                    report.add_message('ERROR', message)
+                    report.set_status('FAILED')
+                    report.write()
+                    report_written = True
+                    return
+                print('Warning: ' + message)
+                report.add_message('WARNING', message)
+
+        if NodeSet:
+            create_boundary_node_set(model, instance, boundary_nodes, False,
+                                     report=report)
+        if NodeInfo:
+            export_boundary_info_csv(
+                model, instance, boundary_faces, node_params,
+                verticalAxis, model_dimension, report=report)
+
+        reaction_forces = {}
+        if SpringDamping:
+            geostatic_file = geostaticFile
+            geostatic_source = normalize_geostatic_file_type(geostaticFileType)
+            report.add('Geostatic', 'source', geostatic_source)
+            if geostatic_source == 'ODB':
+                if not check_geostatic_balance_from_odb(
+                        geostatic_file, instance, stepName, balanceTolerance,
+                        report=report):
+                    message = 'Geostatic balance check failed; boundary conversion stopped.'
+                    print('Error: ' + message)
+                    report.add_message('ERROR', message)
+                    report.set_status('FAILED')
+                    report.write()
+                    report_written = True
+                    return
+                reaction_forces = read_boundary_reactions_from_odb(
+                    geostatic_file, instance, boundary_nodes, stepName,
+                    report=report)
+            else:
+                message = ('CSV reaction input cannot verify displacement balance; '
+                           'ensure the source model satisfies the geostatic tolerance.')
+                print('Warning: ' + message)
+                report.add_message('WARNING', message)
+                reaction_forces = read_boundary_reactions_from_csv(
+                    geostatic_file, boundary_nodes, report=report)
+            apply_viscous_spring_boundary(
+                model, instance, boundary_faces, params, verticalAxis,
+                model_dimension, node_params, report=report)
+            if reaction_forces:
+                ensure_reaction_balance_step(model, stepName, report=report)
+                apply_reaction_balance_loads(
+                    model, instance, reaction_forces, stepName,
+                    model_dimension, report=report)
+            else:
+                print('Skipped reaction-balance loads.')
+                report.add('ReactionBalance', 'loads_applied', 0,
+                           'no reaction forces were read')
+
+        wave_data = None
+        if SeismicLoad and functionOption == 'Seismic':
+            wave_data = load_wave_data(geoType, fileName, report=report)
+
+        if need_final_analysis:
+            setup_steps(model, functionOption, stepName, stepType, t_time,
+                        d_time, iterationsNum, saveNum, report=report)
         else:
-            print('Warning: CSV reaction input cannot verify displacement balance; '
-                  'ensure the source model satisfies the geostatic tolerance.')
-            reaction_forces = read_boundary_reactions_from_csv(
-                geostatic_file, boundary_nodes)
-        apply_viscous_spring_boundary(
-            model, instance, boundary_faces, params, verticalAxis,
-            model_dimension, node_params)
-        if reaction_forces:
-            ensure_reaction_balance_step(model, stepName)
-            apply_reaction_balance_loads(
-                model, instance, reaction_forces, stepName, model_dimension)
+            print('Skipped final analysis step creation.')
+            report.add('Analysis', 'final_step', 'skipped')
+
+        if wave_data and SeismicLoad:
+            apply_seismic_load(model, instance, boundary_nodes, wave_data,
+                               wave111, theta, verticalAxis, report=report)
+
+        if need_final_analysis:
+            submit_job(model, initialJobName, cpuNum, gpuNum, autoSubmit,
+                       report=report)
         else:
-            print('Skipped reaction-balance loads.')
+            print('Skipped final job creation.')
+            report.add('Job', 'final_job', 'skipped')
 
-    wave_data = None
-    if SeismicLoad and functionOption == 'Seismic':
-        wave_data = load_wave_data(geoType, fileName)
-
-    if need_final_analysis:
-        setup_steps(model, functionOption, stepName, stepType, t_time, d_time,
-                    iterationsNum, saveNum)
-    else:
-        print('Skipped final analysis step creation.')
-
-    if wave_data and SeismicLoad:
-        apply_seismic_load(model, instance, boundary_nodes, wave_data,
-                           wave111, theta, verticalAxis)
-
-    if need_final_analysis:
-        submit_job(model, initialJobName, cpuNum, gpuNum, autoSubmit)
-    else:
-        print('Skipped final job creation.')
-
-    orient_view_to_vertical_axis(model, instance, verticalAxis)
-    print('=== Static-Dynamic Analysis Complete ===')
+        orient_view_to_vertical_axis(model, instance, verticalAxis)
+        report.set_status('SUCCESS')
+        report.write()
+        report_written = True
+        print('=== Static-Dynamic Analysis Complete ===')
+    except Exception as e:
+        report.add_message('ERROR', 'Unhandled exception: %s' % e)
+        report.set_status('FAILED')
+        if not report_written:
+            report.write()
+            report_written = True
+        raise
 
 
 def get_model(model_name):
@@ -745,7 +1009,8 @@ def get_boundary_nodes(model, instance, soil_set_name, vertical_axis):
     return nodes
 
 
-def create_boundary_node_set(model, instance, nodes, export_info=False):
+def create_boundary_node_set(model, instance, nodes, export_info=False,
+                             report=None):
     assembly = model.rootAssembly
     assembly_nodes = _assembly_nodes_from_labels(instance, nodes)
     for name in ('ViscousBoundary', 'SD_VisualViscousBoundary'):
@@ -753,6 +1018,8 @@ def create_boundary_node_set(model, instance, nodes, export_info=False):
             del assembly.sets[name]
     assembly.Set(name='ViscousBoundary', nodes=assembly_nodes)
     print('Created set "ViscousBoundary" with %d nodes.' % len(nodes))
+    if report is not None:
+        report.add('NodeSet', 'ViscousBoundary.nodes', len(nodes))
 
     if export_info:
         path = os.path.join(os.path.dirname(__file__), 'NodeInfo.csv')
@@ -763,10 +1030,13 @@ def create_boundary_node_set(model, instance, nodes, export_info=False):
             writer.writerow([node.label] + list(node.coordinates))
         f.close()
         print('Node info exported to: %s' % path)
+        if report is not None:
+            report.add('Output', 'NodeInfo.csv', path)
 
 
 def export_boundary_info_csv(model, instance, boundary_faces, node_params,
-                             vertical_axis, model_dimension='3D'):
+                             vertical_axis, model_dimension='3D',
+                             report=None):
     path = os.path.join(os.path.dirname(__file__), 'BoundaryInfo.csv')
     material_by_node = {}
     weight_by_face = {}
@@ -802,10 +1072,15 @@ def export_boundary_info_csv(model, instance, boundary_faces, node_params,
     finally:
         f.close()
     print('Boundary info exported to: %s' % path)
+    if report is not None:
+        report.add('Output', 'BoundaryInfo.csv', path)
+        report.add('Output', 'BoundaryInfo.rows',
+                   sum([len(nodes) for nodes in boundary_faces.values()]))
+    return path
 
 
 def check_geostatic_balance_from_odb(odb_path, instance, step_name,
-                                     tolerance=1.0e-4):
+                                     tolerance=1.0e-4, report=None):
     if not odb_path:
         raise ValueError('Geostatic ODB file is required.')
     if not os.path.isfile(odb_path):
@@ -845,12 +1120,19 @@ def check_geostatic_balance_from_odb(odb_path, instance, step_name,
                              (instance.name, odb_path))
         print('Geostatic balance check: Umax=%.6g at node %s, tolerance=%.6g' %
               (max_u, str(max_label), float(tolerance)))
+        if report is not None:
+            report.add('Geostatic', 'Umax', max_u)
+            report.add('Geostatic', 'Umax_node', max_label)
+            report.add('Geostatic', 'balance_tolerance', float(tolerance))
+            report.add('Geostatic', 'balance_passed',
+                       max_u <= float(tolerance))
         return max_u <= float(tolerance)
     finally:
         odb.close()
 
 
-def read_boundary_reactions_from_odb(odb_path, instance, nodes, step_name):
+def read_boundary_reactions_from_odb(odb_path, instance, nodes, step_name,
+                                     report=None):
     if not odb_path:
         raise ValueError('Geostatic ODB file is required.')
     if not os.path.isfile(odb_path):
@@ -881,10 +1163,13 @@ def read_boundary_reactions_from_odb(odb_path, instance, nodes, step_name):
             reactions[node.label] = (0.0, 0.0, 0.0)
     print('Read geostatic RF for %d boundary nodes from: %s' %
           (len(reactions), odb_path))
+    if report is not None:
+        report.add('Geostatic', 'reaction_nodes', len(reactions))
+        report.add('Geostatic', 'reaction_file', odb_path)
     return reactions
 
 
-def read_boundary_reactions_from_csv(csv_path, nodes):
+def read_boundary_reactions_from_csv(csv_path, nodes, report=None):
     if not csv_path:
         raise ValueError('Geostatic CSV file is required.')
     if not os.path.isfile(csv_path):
@@ -929,6 +1214,10 @@ def read_boundary_reactions_from_csv(csv_path, nodes):
             missing += 1
     print('Read geostatic RF for %d boundary nodes from CSV: %s (missing filled as zero: %d)' %
           (len(reactions), csv_path, missing))
+    if report is not None:
+        report.add('Geostatic', 'reaction_nodes', len(reactions))
+        report.add('Geostatic', 'reaction_file', csv_path)
+        report.add('Geostatic', 'missing_reaction_nodes', missing)
     return reactions
 
 
@@ -965,15 +1254,20 @@ def _csv_float(cells, index):
         return 0.0
 
 
-def ensure_reaction_balance_step(model, step_name):
+def ensure_reaction_balance_step(model, step_name, report=None):
     if step_name in model.steps.keys():
+        if report is not None:
+            report.add('ReactionBalance', 'target_step', step_name,
+                       'existing')
         return
     model.StaticStep(name=step_name, previous='Initial', nlgeom=OFF)
     print('Created reaction-balance target step: %s' % step_name)
+    if report is not None:
+        report.add('ReactionBalance', 'target_step', step_name, 'created')
 
 
 def apply_reaction_balance_loads(model, instance, reactions, step_name,
-                                 model_dimension='3D'):
+                                 model_dimension='3D', report=None):
     count = 0
     skipped = 0
     for label, rf in reactions.items():
@@ -995,10 +1289,15 @@ def apply_reaction_balance_loads(model, instance, reactions, step_name,
         count += 1
     print('Applied equivalent geostatic RF nodal loads: %d (skipped zero RF: %d)' %
           (count, skipped))
+    if report is not None:
+        report.add('ReactionBalance', 'loads_applied', count)
+        report.add('ReactionBalance', 'zero_rf_skipped', skipped)
+    return {'loads_applied': count, 'zero_rf_skipped': skipped}
 
 
 def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
-                                  model_dimension='3D', node_params=None):
+                                  model_dimension='3D', node_params=None,
+                                  report=None):
     assembly = model.rootAssembly
     ef = assembly.engineeringFeatures
 
@@ -1054,6 +1353,13 @@ def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
                   (face_name,
                    'length' if model_dimension == '2D' else 'area',
                    min(values), max(values), sum(values)))
+            if report is not None:
+                report.add('SpringDashpot', face_name + '.weight_min',
+                           min(values))
+                report.add('SpringDashpot', face_name + '.weight_max',
+                           max(values))
+                report.add('SpringDashpot', face_name + '.weight_total',
+                           sum(values))
 
         for comp_name, dof, stiffness_key, dashpot_key in specs:
             grouped = {}
@@ -1100,9 +1406,15 @@ def apply_viscous_spring_boundary(model, instance, nodes, params, vertical_axis,
     boundary_kind = 'edges' if model_dimension == '2D' else 'faces'
     print('Visual viscous-spring boundary applied to %d unique nodes on %d %s (%d weighted groups).' %
           (len(all_nodes), active_faces, boundary_kind, created_groups))
+    if report is not None:
+        report.add('SpringDashpot', 'unique_nodes', len(all_nodes))
+        report.add('SpringDashpot', 'active_faces', active_faces)
+        report.add('SpringDashpot', 'weighted_groups', created_groups)
+    return {'unique_nodes': len(all_nodes), 'active_faces': active_faces,
+            'weighted_groups': created_groups}
 
 
-def load_wave_data(geo_type, file_path=''):
+def load_wave_data(geo_type, file_path='', report=None):
     search_files = []
     if file_path:
         if os.path.isfile(file_path):
@@ -1141,6 +1453,9 @@ def load_wave_data(geo_type, file_path=''):
             result['velocity'] = data
             kind = 'velocity'
         print('Loaded %s data: %s (%d points)' % (kind, path, len(data)))
+        if report is not None:
+            report.add('Wave', kind + '.file', path)
+            report.add('Wave', kind + '.points', len(data))
 
     if result.get('acceleration'):
         return result['acceleration']
@@ -1149,14 +1464,18 @@ def load_wave_data(geo_type, file_path=''):
     if result.get('displacement'):
         return result['displacement']
     print('Warning: no valid wave data found; seismic load skipped.')
+    if report is not None:
+        report.add_message('WARNING', 'No valid wave data found; seismic load skipped.')
     return None
 
 
 def setup_steps(model, function_option, step_name, step_type,
-                t_time, d_time, iterations_num, save_num):
+                t_time, d_time, iterations_num, save_num, report=None):
     previous = step_name if step_name in model.steps.keys() else 'Initial'
     analysis_step = 'Step-dynamic' if function_option == 'Seismic' else 'Step-static'
     if analysis_step in model.steps.keys():
+        if report is not None:
+            report.add('Analysis', 'final_step', analysis_step, 'existing')
         return
     if function_option == 'Seismic' and step_type == 'Implicit':
         model.ImplicitDynamicsStep(name=analysis_step, previous=previous,
@@ -1173,6 +1492,9 @@ def setup_steps(model, function_option, step_name, step_type,
                          initialInc=float(d_time))
     set_field_outputs(model, save_num)
     print('Created step: %s' % analysis_step)
+    if report is not None:
+        report.add('Analysis', 'final_step', analysis_step, 'created')
+        report.add('Analysis', 'step_type', step_type)
 
 
 def set_field_outputs(model, save_num):
@@ -1180,10 +1502,13 @@ def set_field_outputs(model, save_num):
         request.setValues(frequency=int(save_num))
 
 
-def apply_seismic_load(model, instance, nodes, wave_data, wave_type, theta, vertical_axis):
+def apply_seismic_load(model, instance, nodes, wave_data, wave_type, theta,
+                       vertical_axis, report=None):
     step_name = 'Step-dynamic'
     if step_name not in model.steps.keys():
         print('Warning: dynamic step not found; seismic load skipped.')
+        if report is not None:
+            report.add_message('WARNING', 'Dynamic step not found; seismic load skipped.')
         return
     amp_name = 'SD_Wave_Amplitude'
     if amp_name in model.amplitudes.keys():
@@ -1192,6 +1517,10 @@ def apply_seismic_load(model, instance, nodes, wave_data, wave_type, theta, vert
                            data=tuple(wave_data))
     print('Created seismic amplitude "%s" with %d points.' %
           (amp_name, len(wave_data)))
+    if report is not None:
+        report.add('Wave', 'amplitude', amp_name)
+        report.add('Wave', 'amplitude_points', len(wave_data))
+        report.add('Wave', 'wave_type', wave_type)
 
 
 def create_analysis_job(model, job_name, cpu_num, gpu_num, description, replace=False):
@@ -1216,7 +1545,8 @@ def create_analysis_job(model, job_name, cpu_num, gpu_num, description, replace=
                    numGPUs=int(gpu_num))
 
 
-def submit_job(model, job_name, cpu_num, gpu_num, auto_submit=False):
+def submit_job(model, job_name, cpu_num, gpu_num, auto_submit=False,
+               report=None):
     job = create_analysis_job(
         model, job_name or model.name + '_StaticDynamic',
         cpu_num, gpu_num,
@@ -1224,9 +1554,16 @@ def submit_job(model, job_name, cpu_num, gpu_num, auto_submit=False):
         replace=True)
     print('Job "%s" created with %d CPUs, %d GPUs.' %
           (job.name, int(cpu_num), int(gpu_num)))
+    if report is not None:
+        report.add('Job', 'name', job.name)
+        report.add('Job', 'cpu_num', int(cpu_num))
+        report.add('Job', 'gpu_num', int(gpu_num))
+        report.add('Job', 'auto_submit', auto_submit)
     if auto_submit:
         job.submit(consistencyChecking=OFF)
         print('Job "%s" submitted.' % job.name)
         job.waitForCompletion()
         print('Job "%s" finished with status: %s' %
               (job.name, mdb.jobs[job.name].status))
+        if report is not None:
+            report.add('Job', 'status', mdb.jobs[job.name].status)

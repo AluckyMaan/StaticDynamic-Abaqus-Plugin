@@ -77,17 +77,21 @@ class StaticDynamicDB(object):
 class StaticDynamicDBFileHandler(object):
     def __init__(self, form, fileTextField, fileButton, patternTarget,
                  fileKeyword=None, title='Select Wave File',
-                 patterns=None):
+                 patterns=None, dbKey=None):
         self.form = form
         self.fileTextField = fileTextField
         self.fileButton = fileButton
         self.patternTarget = patternTarget
         self.fileKeyword = fileKeyword
         self.title = title
+        self.dbKey = dbKey
         self.fileName = ''
         self.patterns = patterns or (
             'Wave Files (*.csv, *.xlsx);;CSV Files (*.csv);;'
             'Excel Files (*.xlsx);;All Files (*)')
+
+    def setPatterns(self, patterns):
+        self.patterns = patterns
 
     def activate(self):
         from abaqusGui import AFXFileSelectorDialog, AFXSELECTFILE_EXISTING
@@ -98,10 +102,16 @@ class StaticDynamicDBFileHandler(object):
             AFXSELECTFILE_EXISTING)
         dialog.setReadOnlyPatterns(self.patterns)
         dialog.create()
-        dialog.showModal()
-        self.fileName = file_kw.getValue()
-        if self.fileName:
-            self.fileTextField.setText(self.fileName)
+        if dialog.showModal():
+            self.fileName = file_kw.getValue()
+            if self.fileName:
+                self.fileTextField.setText(self.fileName)
+                try:
+                    file_kw.setValue(self.fileName)
+                except Exception:
+                    pass
+                if self.dbKey:
+                    self.form.db.setValue(self.dbKey, self.fileName)
 
 
 def read_csv_file(path):

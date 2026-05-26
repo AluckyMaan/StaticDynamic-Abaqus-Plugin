@@ -2,7 +2,7 @@
 
 [中文说明](README.zh-CN.md)
 
-Current version: `0.2.0`
+Current version: `0.2.1`
 
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
@@ -75,7 +75,7 @@ Copy this repository folder into an Abaqus plugin search path, for example:
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.2.0` in the plugin menu.
+Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.2.1` in the plugin menu.
 
 ## Basic Workflow
 
@@ -89,7 +89,8 @@ Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.2.0` in the pl
    - full dynamic workflow
 6. Run the plugin.
 7. Inspect generated assembly sets and visual `SpringDashpotToGround` features.
-8. Open the geostatic ODB and check the final-frame displacement field `U`.
+8. Review `StaticDynamic_run_report.txt` or `StaticDynamic_run_report.csv`.
+9. Open the geostatic ODB and check the final-frame displacement field `U`.
 
 ## Geostatic Balance Input
 
@@ -111,6 +112,41 @@ complex soil-structure balance workflows outside the boundary-conversion plugin.
 When `Node Information` is enabled, the plugin exports `BoundaryInfo.csv` with
 node coordinates, boundary face name, material fractions, and tributary area or
 length. This file can be used to build or audit external geostatic reaction CSVs.
+
+## Preflight and Run Reports
+
+Version `0.2.1` adds a preflight check before boundary conversion. The plugin now
+stops early when required model inputs are missing or inconsistent, including:
+
+- missing part, instance, or mesh nodes
+- incompatible function selections
+- missing or mismatched ODB/CSV geostatic files
+- non-positive structure depth when spring damping is enabled
+- non-positive geostatic balance tolerance
+
+Each run writes:
+
+```text
+StaticDynamic_run_report.txt
+StaticDynamic_run_report.csv
+```
+
+The report records inputs, preflight warnings/errors, boundary face node counts,
+tributary area or length totals, material grouping summary, geostatic reaction
+read statistics, spring-dashpot group counts, reaction-balance load counts, and
+job setup information.
+
+## Lightweight Validation
+
+The repository includes an Abaqus-session validation helper:
+
+```text
+examples/validate_current_session.py
+```
+
+Run it from Abaqus/CAE or Abaqus Python after loading the sample validation
+models. It checks boundary detection and tributary weight totals without
+submitting jobs or opening ODB files.
 
 ## Boundary Logic
 

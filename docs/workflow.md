@@ -5,22 +5,26 @@
 The plugin currently follows this sequence:
 
 1. Locate the Abaqus model and soil instance.
-2. Detect model dimension as 2D or 3D.
-3. Extract material properties from the soil material.
+2. Run preflight checks for function dependencies, model inputs, geostatic file
+   consistency, structure depth, and balance tolerance.
+3. Detect model dimension as 2D or 3D.
 4. Detect artificial boundary faces or edges.
-5. Create a visible boundary node set.
-6. If spring-damping is enabled:
+5. Extract material properties when node information or spring-damping output
+   requires boundary parameters.
+6. Create a visible boundary node set.
+7. If spring-damping is enabled:
    - choose a geostatic reaction source: ODB or CSV
    - `ODB`: read boundary reactions from the final frame of the selected step
      in a balanced ODB after checking the final-frame `U` tolerance
    - `CSV`: read boundary reactions from `nodeLabel, RF1, RF2, RF3`
    - apply weighted visual viscous-spring boundaries
    - apply equivalent reaction-balance nodal loads
-7. If seismic load is enabled:
+8. If seismic load is enabled:
    - read wave data
    - create the final analysis step
    - create the final job
    - optionally submit the final job
+9. Write `StaticDynamic_run_report.txt` and `StaticDynamic_run_report.csv`.
 
 ## GUI Modes
 
