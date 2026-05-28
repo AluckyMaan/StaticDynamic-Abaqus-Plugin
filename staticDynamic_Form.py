@@ -329,6 +329,7 @@ class StaticDynamicDialog(AFXDataDialog):
             row, 10, 2, '', form.waveInputModeKw, 0, LAYOUT_FILL_X)
         self.waveInputModeCmb.appendItem('Uniform')
         self.waveInputModeCmb.appendItem('Traveling')
+        self.waveInputModeCmb.appendItem('LayeredSite')
         self.waveInputModeCmb.setCurrentItem(0)
 
         row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)

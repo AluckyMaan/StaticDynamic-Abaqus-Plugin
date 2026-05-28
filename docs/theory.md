@@ -118,6 +118,19 @@ records global and face-level delay statistics. A safety limit prevents very
 fine delay bins from creating an unmanageable number of Abaqus amplitudes and
 loads.
 
+## Layered Site Arrival Delay
+
+`Input Mode = LayeredSite` adds a first site-column approximation. Instead of
+using one apparent propagation velocity, the plugin derives an equivalent
+vertical `Vs` profile from the same material properties used for the
+viscous-spring boundary. Travel time is accumulated from the bottom coordinate
+to each boundary-node elevation along the selected vertical axis.
+
+The generated `SeismicSiteProfile.csv` records vertical coordinate,
+equivalent `Vs`, cumulative travel time, and sample count. The node-level
+delays are still exported through `SeismicArrivalInfo.csv`, so the applied
+time shifts can be audited before running the final dynamic job.
+
 This is still a kinematic arrival-time correction. It does not replace a
 free-field column calculation, deconvolution from surface records to bedrock, or
 a full oblique-wave scattering solution for layered media.

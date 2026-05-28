@@ -11,7 +11,10 @@
   velocity, delay range, and delay-bin count.
 - Added `SeismicArrivalInfo.csv`, per-face arrival-delay statistics, delay-bin
   safety guard, and P/S incident-direction consistency warnings.
-- Kept site-response/free-field preprocessing as the next `0.4.0` module.
+- Added `LayeredSite` input mode with model-derived vertical `Vs` travel-time
+  delays and `SeismicSiteProfile.csv` audit export.
+- Kept equivalent-linear site response and free-field column coupling as the
+  next `0.4.0` module.
 
 ## 0.3.0 - 2026-05-26
 

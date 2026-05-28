@@ -157,6 +157,9 @@ The `0.4.0-dev` line adds a first incident-wave input mode:
 
 - `Input Mode = Uniform`: all artificial-boundary nodes use the same record.
 - `Input Mode = Traveling`: boundary nodes are grouped by arrival delay.
+- `Input Mode = LayeredSite`: boundary nodes are grouped by a 1D site-column
+  delay estimated from the model material `Vs` values along the selected
+  vertical axis.
 - `Incident Vector`: motion or force direction.
 - `Propagation Vector`: wave travel direction used for arrival-time delay.
 - `Apparent Velocity`: propagation speed in the selected model length unit per
@@ -183,11 +186,18 @@ bins; increase `Delay Bin Size` if this limit is reached. The plugin also emits
 warnings when `P`/`S` wave type and the incident/propagation vectors look
 physically inconsistent.
 
+`LayeredSite` is a conservative site-analysis bridge for `v0.4.0`: it reads the
+layered soil stiffness/density already used for the viscous-spring boundary,
+builds an equivalent vertical `Vs` profile, writes `SeismicSiteProfile.csv`,
+and applies depth-dependent arrival delays. It is a 1D kinematic travel-time
+correction only; it does not yet perform equivalent-linear amplification,
+deconvolution, or full free-field column coupling.
+
 ## Roadmap
 
 The remaining `v0.4.0` development target is more realistic earthquake input:
 
-- site-response preprocessing for bedrock-to-soil-surface or free-field input
+- equivalent-linear site response and free-field column coupling
 - clearer selection and scaling workflow for PEER records before model input
 - checks for multi-component horizontal and vertical motion consistency
 
