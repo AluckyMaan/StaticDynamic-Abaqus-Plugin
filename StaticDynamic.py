@@ -13,6 +13,7 @@ import regionToolset
 import staticDynamicDB
 
 __version__ = '0.4.0-dev'
+MAX_TRAVELING_DELAY_BINS = 200
 
 
 class StaticDynamicRunReport(object):
@@ -116,12 +117,21 @@ def _report_inputs(report, kwargs):
         report.add('Input', name, kwargs[name])
 
 
+def _vector_magnitude(vector):
+    try:
+        vals = [float(item) for item in vector]
+    except Exception:
+        return 0.0
+    return math.sqrt(sum([item * item for item in vals]))
+
+
 def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                           NodeSet, NodeInfo, SpringDamping, SeismicLoad,
                           function_option,
                           geostatic_file_type, geostatic_file, step_name,
                           balance_tolerance, geo_type, wave_file,
-                          model_length_unit, wave_input_mode,
+                          model_length_unit, incident_vector,
+                          wave_input_mode, propagation_vector,
                           apparent_wave_velocity, delay_bin_size, report):
     errors = []
     warnings = []
@@ -186,6 +196,9 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
         except Exception:
             errors.append('Unsupported Model Length Unit "%s"; use m, cm, or mm.' %
                           model_length_unit)
+        incident = _parse_vector_components(incident_vector)
+        if incident is None or _vector_magnitude(incident) <= 1.0e-20:
+            errors.append('Incident Vector must be a non-zero x,y,z vector.')
         mode = normalize_wave_input_mode(wave_input_mode)
         if mode == 'Traveling':
             try:
@@ -193,6 +206,10 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                     errors.append('Traveling wave input requires Apparent Velocity greater than 0.')
             except Exception:
                 errors.append('Traveling wave input requires a numeric Apparent Velocity.')
+            if str(propagation_vector or '').strip():
+                propagation = _parse_vector_components(propagation_vector)
+                if propagation is None or _vector_magnitude(propagation) <= 1.0e-20:
+                    errors.append('Propagation Vector must be a non-zero x,y,z vector.')
         try:
             if float(delay_bin_size) < 0.0:
                 errors.append('Delay Bin Size cannot be negative.')
@@ -201,12 +218,15 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
 
     for message in warnings:
         print('Warning: ' + message)
-        report.add_message('WARNING', message)
+        if report is not None:
+            report.add_message('WARNING', message)
     for message in errors:
         print('Error: ' + message)
-        report.add_message('ERROR', message)
-    report.add('Preflight', 'errors', len(errors))
-    report.add('Preflight', 'warnings', len(warnings))
+        if report is not None:
+            report.add_message('ERROR', message)
+    if report is not None:
+        report.add('Preflight', 'errors', len(errors))
+        report.add('Preflight', 'warnings', len(warnings))
     return errors, warnings
 
 def Main(functionOption='Seismic', Model_name='Model-1',
@@ -290,7 +310,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
             NodeSet, NodeInfo, SpringDamping, SeismicLoad,
             functionOption, geostaticFileType, geostaticFile, stepName,
             balanceTolerance, geoType, fileName, modelLengthUnit,
-            waveInputMode, apparentWaveVelocity, delayBinSize, report)
+            theta_a, waveInputMode, propagationVector,
+            apparentWaveVelocity, delayBinSize, report)
         if errors:
             report.set_status('FAILED')
             report.write()
@@ -496,6 +517,19 @@ def parse_theta(theta_str):
     except Exception:
         print('Warning: invalid theta_a, using [0, 1, 0].')
         return [0.0, 1.0, 0.0]
+
+
+def _parse_vector_components(vector_str):
+    text = str(vector_str or '').strip()
+    if not text:
+        return None
+    try:
+        vals = [float(x.strip()) for x in text.split(',')]
+        if len(vals) != 3:
+            return None
+        return vals
+    except Exception:
+        return None
 
 
 def parse_vector(vector_str, fallback):
@@ -1177,6 +1211,35 @@ def export_boundary_info_csv(model, instance, boundary_faces, node_params,
     return path
 
 
+def export_seismic_arrival_info_csv(instance, boundary_faces, arrival_delays,
+                                    report=None):
+    path = os.path.join(os.path.dirname(__file__),
+                        'SeismicArrivalInfo.csv')
+    rows = 0
+    f = open(path, 'wb')
+    try:
+        writer = csv.writer(f)
+        writer.writerow([
+            'nodeLabel', 'x', 'y', 'z', 'faceName', 'arrivalDelay'
+        ])
+        for face_name in sorted(boundary_faces.keys()):
+            for node in sorted(boundary_faces[face_name],
+                               key=lambda item: item.label):
+                coords = _node_coords(node)
+                writer.writerow([
+                    node.label, coords[0], coords[1], coords[2], face_name,
+                    arrival_delays.get(node.label, 0.0)
+                ])
+                rows += 1
+    finally:
+        f.close()
+    print('Seismic arrival info exported to: %s' % path)
+    if report is not None:
+        report.add('Output', 'SeismicArrivalInfo.csv', path)
+        report.add('Output', 'SeismicArrivalInfo.rows', rows)
+    return path
+
+
 def check_geostatic_balance_from_odb(odb_path, instance, step_name,
                                      tolerance=1.0e-4, report=None):
     if not odb_path:
@@ -1780,6 +1843,9 @@ def _node_arrival_delays(boundary_faces, propagation_vector,
     if speed <= 0.0:
         raise ValueError('Traveling wave input requires Apparent Velocity greater than 0.')
 
+    if _vector_magnitude(propagation_vector) <= 1.0e-20:
+        raise ValueError('Traveling wave input requires a non-zero Propagation Vector.')
+
     nodes = _unique_nodes_from_faces(boundary_faces)
     if not nodes:
         return {}, {
@@ -1825,6 +1891,15 @@ def _node_arrival_delays(boundary_faces, propagation_vector,
                       for label, delay in delays.items())
 
     unique_delays = sorted(set(['%.12g' % delay for delay in delays.values()]))
+    if len(unique_delays) > MAX_TRAVELING_DELAY_BINS:
+        message = (
+            'Traveling wave delay bins (%d) exceed the safety limit (%d). '
+            'Increase Delay Bin Size or reduce the boundary mesh density.' %
+            (len(unique_delays), MAX_TRAVELING_DELAY_BINS))
+        if report is not None:
+            report.add_message('ERROR', message)
+        raise ValueError(message)
+
     max_delay = max(delays.values()) if delays else 0.0
     stats = {
         'mode': 'Traveling',
@@ -1843,7 +1918,48 @@ def _node_arrival_delays(boundary_faces, propagation_vector,
         report.add('SeismicInput', 'arrival_delay_max', stats['max_delay'])
         report.add('SeismicInput', 'arrival_delay_bins', stats['delay_bins'])
         report.add('SeismicInput', 'arrival_delay_bin_size', bin_size)
+        for face_name in sorted(boundary_faces.keys()):
+            face_delays = [
+                delays.get(node.label, 0.0)
+                for node in boundary_faces[face_name]
+            ]
+            if not face_delays:
+                continue
+            face_bins = sorted(set(['%.12g' % item for item in face_delays]))
+            report.add('SeismicInput', face_name + '.arrival_delay_min',
+                       min(face_delays))
+            report.add('SeismicInput', face_name + '.arrival_delay_max',
+                       max(face_delays))
+            report.add('SeismicInput', face_name + '.arrival_delay_bins',
+                       len(face_bins))
     return delays, stats
+
+
+def _add_wave_direction_warnings(wave_type, incident_direction,
+                                 propagation_direction, report=None):
+    wtype = str(wave_type or '').strip().upper()
+    if wtype not in ('P', 'S'):
+        return
+    dot = (
+        incident_direction[0] * propagation_direction[0] +
+        incident_direction[1] * propagation_direction[1] +
+        incident_direction[2] * propagation_direction[2])
+    abs_dot = abs(dot)
+    message = None
+    if wtype == 'P' and abs_dot < 0.5:
+        message = ('P-wave input usually has motion direction close to the '
+                   'propagation direction; check Incident Vector and '
+                   'Propagation Vector.')
+    if wtype == 'S' and abs_dot > 0.5:
+        message = ('S-wave input usually has motion direction close to '
+                   'perpendicular to the propagation direction; check '
+                   'Incident Vector and Propagation Vector.')
+    if report is not None:
+        report.add('SeismicInput', 'incident_propagation_dot', dot)
+    if message:
+        print('Warning: ' + message)
+        if report is not None:
+            report.add_message('WARNING', message)
 
 
 def _delete_prefixed_items(container, prefixes):
@@ -1909,6 +2025,12 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
         boundary_faces, propagation_vector, apparent_wave_velocity,
         delay_bin_size, displacement, velocity, wave_input_mode,
         report=report)
+    propagation_direction = _unit_vector(propagation_vector)
+    if delay_stats.get('mode', 'Uniform') == 'Traveling':
+        _add_wave_direction_warnings(
+            wave_type, direction, propagation_direction, report=report)
+        export_seismic_arrival_info_csv(
+            instance, boundary_faces, arrival_delays, report=report)
     if report is not None:
         report.add('SeismicInput', 'direction_unit_vector', direction)
         report.add('SeismicInput', 'wave_type', wave_type)

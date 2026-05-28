@@ -175,6 +175,14 @@ where `n` is the normalized `Propagation Vector`, `c_app` is `Apparent
 Velocity`, and `x_ref` is the leading boundary projection. This is a spatial
 arrival-time correction, not yet a full free-field wave scattering solution.
 
+Traveling-wave input also writes `SeismicArrivalInfo.csv` with each boundary
+node's arrival delay. The run report records delay range and delay-bin counts
+globally and per boundary face. To prevent accidental creation of an excessive
+number of Abaqus amplitudes and loads, the current safety limit is 200 delay
+bins; increase `Delay Bin Size` if this limit is reached. The plugin also emits
+warnings when `P`/`S` wave type and the incident/propagation vectors look
+physically inconsistent.
+
 ## Roadmap
 
 The remaining `v0.4.0` development target is more realistic earthquake input:

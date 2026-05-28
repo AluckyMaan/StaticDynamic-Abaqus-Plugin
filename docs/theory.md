@@ -112,6 +112,12 @@ wave velocity in model length units per second. Nodes are grouped by delay bin
 so Abaqus can apply shifted tabular amplitudes without creating one amplitude
 per node unless the selected bin size requires it.
 
+For auditability, traveling-wave runs export `SeismicArrivalInfo.csv` with
+node coordinates, boundary face, and computed arrival delay. The run report also
+records global and face-level delay statistics. A safety limit prevents very
+fine delay bins from creating an unmanageable number of Abaqus amplitudes and
+loads.
+
 This is still a kinematic arrival-time correction. It does not replace a
 free-field column calculation, deconvolution from surface records to bedrock, or
 a full oblique-wave scattering solution for layered media.

@@ -25,6 +25,8 @@ The plugin currently follows this sequence:
    - choose uniform input or traveling-wave input
    - for traveling-wave input, compute boundary-node arrival delays from the
      propagation vector and apparent velocity
+   - write `SeismicArrivalInfo.csv` and delay statistics for traveling-wave
+     runs
    - create the final analysis step
    - create equivalent boundary input amplitudes and nodal loads from
      `K_node * u_g(t) + C_node * v_g(t)`

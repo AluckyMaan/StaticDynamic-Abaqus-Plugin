@@ -186,6 +186,8 @@ F_i(t) = K_i * u_g(t - tau_i) + C_i * v_g(t - tau_i)
 其中 `n` 为归一化后的 `Propagation Vector`，`c_app` 为 `Apparent
 Velocity`，`x_ref` 为最先到达的边界投影位置。这个功能是空间到时差修正，还不是完整自由场散射求解。
 
+行波模式会额外导出 `SeismicArrivalInfo.csv`，记录每个边界节点的到时差。运行报告会记录整体和各边界面的延迟范围、延迟分组数量。为了避免 Abaqus 幅值和荷载对象数量失控，当前延迟分组安全上限为 200；如果触发该限制，应增大 `Delay Bin Size`。插件还会在 `P/S` 波类型与入射方向、传播方向明显不一致时给出 warning。
+
 ## 后续路线
 
 `v0.4.0` 后续继续优化更真实的地震波输入：
