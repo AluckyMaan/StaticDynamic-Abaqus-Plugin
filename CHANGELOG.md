@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-dev - Unreleased
+
+- Added traveling-wave seismic input mode with spatial arrival-time delay.
+- Added separate `Propagation Vector`, `Apparent Velocity`, and optional
+  `Delay Bin Size` controls for incident-wave input.
+- Split seismic equivalent-load groups by delay bin so different boundary
+  locations can receive shifted amplitudes.
+- Added run-report fields for arrival mode, propagation vector, apparent
+  velocity, delay range, and delay-bin count.
+- Kept site-response/free-field preprocessing as the next `0.4.0` module.
+
 ## 0.3.0 - 2026-05-26
 
 - Added PEER NGA strong-motion reader support for `.AT2`, `.VT2`, and `.DT2`

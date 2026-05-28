@@ -89,3 +89,29 @@ defined in global coordinates by the normalized `Incident Vector` value.
 This implementation is intended as a direct uniform boundary-motion input. It
 does not yet model layered free-field deconvolution, oblique wave scattering, or
 spatially variable wave arrival along the boundary.
+
+## Traveling-Wave Arrival Delay
+
+The `0.4.0-dev` line adds a first spatial correction for incident-wave input.
+The motion direction and propagation direction are treated separately:
+
+- `Incident Vector` defines the global force or motion component.
+- `Propagation Vector` defines the direction in which the record arrives along
+  the artificial boundary.
+
+For each boundary node, the arrival delay is computed from the projection along
+the normalized propagation vector:
+
+```text
+tau_i = ((x_i - x_ref) dot n) / c_app
+F_i(t) = K_i * u_g(t - tau_i) + C_i * v_g(t - tau_i)
+```
+
+where `x_ref` is the leading boundary projection and `c_app` is the apparent
+wave velocity in model length units per second. Nodes are grouped by delay bin
+so Abaqus can apply shifted tabular amplitudes without creating one amplitude
+per node unless the selected bin size requires it.
+
+This is still a kinematic arrival-time correction. It does not replace a
+free-field column calculation, deconvolution from surface records to bedrock, or
+a full oblique-wave scattering solution for layered media.

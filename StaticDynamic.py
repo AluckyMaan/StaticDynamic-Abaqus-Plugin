@@ -12,7 +12,7 @@ from caeModules import *
 import regionToolset
 import staticDynamicDB
 
-__version__ = '0.3.0'
+__version__ = '0.4.0-dev'
 
 
 class StaticDynamicRunReport(object):
@@ -121,7 +121,8 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                           function_option,
                           geostatic_file_type, geostatic_file, step_name,
                           balance_tolerance, geo_type, wave_file,
-                          model_length_unit, report):
+                          model_length_unit, wave_input_mode,
+                          apparent_wave_velocity, delay_bin_size, report):
     errors = []
     warnings = []
 
@@ -185,6 +186,18 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
         except Exception:
             errors.append('Unsupported Model Length Unit "%s"; use m, cm, or mm.' %
                           model_length_unit)
+        mode = normalize_wave_input_mode(wave_input_mode)
+        if mode == 'Traveling':
+            try:
+                if float(apparent_wave_velocity) <= 0.0:
+                    errors.append('Traveling wave input requires Apparent Velocity greater than 0.')
+            except Exception:
+                errors.append('Traveling wave input requires a numeric Apparent Velocity.')
+        try:
+            if float(delay_bin_size) < 0.0:
+                errors.append('Delay Bin Size cannot be negative.')
+        except Exception:
+            errors.append('Delay Bin Size must be numeric.')
 
     for message in warnings:
         print('Warning: ' + message)
@@ -202,6 +215,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
          geoType='PEER', stepType='Implicit', stepName='Step-geo',
          wave111='P', theta_a='0,1,0',
          modelLengthUnit='m',
+         waveInputMode='Uniform', propagationVector='',
+         apparentWaveVelocity=0.0, delayBinSize=0.0,
          t_time=20.0, d_time=0.01, iterationsNum=20, saveNum=2,
          cpuNum=4, gpuNum=0, initialJobName='',
          NodeSet=True, NodeInfo=False,
@@ -224,6 +239,10 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         'wave111': wave111,
         'theta_a': theta_a,
         'modelLengthUnit': modelLengthUnit,
+        'waveInputMode': waveInputMode,
+        'propagationVector': propagationVector,
+        'apparentWaveVelocity': apparentWaveVelocity,
+        'delayBinSize': delayBinSize,
         't_time': t_time,
         'd_time': d_time,
         'iterationsNum': iterationsNum,
@@ -270,7 +289,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
             model, instance, soilPart_name, soilSet, depth,
             NodeSet, NodeInfo, SpringDamping, SeismicLoad,
             functionOption, geostaticFileType, geostaticFile, stepName,
-            balanceTolerance, geoType, fileName, modelLengthUnit, report)
+            balanceTolerance, geoType, fileName, modelLengthUnit,
+            waveInputMode, apparentWaveVelocity, delayBinSize, report)
         if errors:
             report.set_status('FAILED')
             report.write()
@@ -281,6 +301,9 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         report.add('Model', 'dimension', model_dimension)
         theta = parse_theta(theta_a)
         report.add('Model', 'incident_vector', theta)
+        propagation = parse_vector(
+            propagationVector, _vertical_axis_vector(verticalAxis))
+        report.add('Model', 'propagation_vector', propagation)
 
         boundary_faces = get_boundary_node_faces(
             model, instance, soilSet, verticalAxis, model_dimension)
@@ -398,7 +421,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
             apply_seismic_load(
                 model, instance, boundary_faces, params, wave_data, wave111,
                 theta, verticalAxis, model_dimension, node_params,
-                report=report)
+                waveInputMode, propagation, apparentWaveVelocity,
+                delayBinSize, report=report)
 
         if need_final_analysis:
             submit_job(model, initialJobName, cpuNum, gpuNum, autoSubmit,
@@ -472,6 +496,37 @@ def parse_theta(theta_str):
     except Exception:
         print('Warning: invalid theta_a, using [0, 1, 0].')
         return [0.0, 1.0, 0.0]
+
+
+def parse_vector(vector_str, fallback):
+    text = str(vector_str or '').strip()
+    if not text:
+        return list(fallback)
+    try:
+        vals = [float(x.strip()) for x in text.split(',')]
+        if len(vals) != 3:
+            raise ValueError
+        return vals
+    except Exception:
+        print('Warning: invalid vector "%s", using fallback %s.' %
+              (_safe_log_text(vector_str), fallback))
+        return list(fallback)
+
+
+def _vertical_axis_vector(vertical_axis):
+    axis = str(vertical_axis or 'Y').upper()
+    if axis == 'X':
+        return [1.0, 0.0, 0.0]
+    if axis == 'Z':
+        return [0.0, 0.0, 1.0]
+    return [0.0, 1.0, 0.0]
+
+
+def normalize_wave_input_mode(mode):
+    text = str(mode or 'Uniform').strip().lower()
+    if text in ('traveling', 'travelling', 'incident', 'oblique'):
+        return 'Traveling'
+    return 'Uniform'
 
 
 def normalize_geostatic_file_type(file_type):
@@ -1686,6 +1741,111 @@ def _force_series(displacement, velocity, stiffness, dashpot, factor):
     return data, max_abs
 
 
+def _series_time_increment(series):
+    increments = []
+    for index in range(1, len(series)):
+        dt = float(series[index][0]) - float(series[index - 1][0])
+        if dt > 1.0e-20:
+            increments.append(dt)
+    if not increments:
+        return 0.0
+    return min(increments)
+
+
+def _delay_force_data(force_data, delay):
+    delay = float(delay)
+    if abs(delay) <= 1.0e-20:
+        return force_data
+    shifted = [(0.0, 0.0)]
+    for t, value in force_data:
+        shifted.append((float(t) + delay, value))
+    return shifted
+
+
+def _node_arrival_delays(boundary_faces, propagation_vector,
+                         apparent_velocity, delay_bin_size,
+                         displacement, velocity, wave_input_mode,
+                         report=None):
+    mode = normalize_wave_input_mode(wave_input_mode)
+    if mode != 'Traveling':
+        return {}, {
+            'mode': 'Uniform',
+            'min_delay': 0.0,
+            'max_delay': 0.0,
+            'delay_bins': 1,
+            'delay_bin_size': 0.0,
+        }
+
+    speed = float(apparent_velocity)
+    if speed <= 0.0:
+        raise ValueError('Traveling wave input requires Apparent Velocity greater than 0.')
+
+    nodes = _unique_nodes_from_faces(boundary_faces)
+    if not nodes:
+        return {}, {
+            'mode': 'Traveling',
+            'min_delay': 0.0,
+            'max_delay': 0.0,
+            'delay_bins': 0,
+            'delay_bin_size': 0.0,
+        }
+
+    direction = _unit_vector(propagation_vector)
+    projections = {}
+    for node in nodes:
+        coords = _node_coords(node)
+        projections[node.label] = (
+            coords[0] * direction[0] +
+            coords[1] * direction[1] +
+            coords[2] * direction[2])
+
+    min_projection = min(projections.values())
+    raw_delays = dict(
+        (label, (projection - min_projection) / speed)
+        for label, projection in projections.items())
+
+    try:
+        bin_size = float(delay_bin_size)
+    except Exception:
+        bin_size = 0.0
+    if bin_size <= 0.0:
+        bin_size = max(_series_time_increment(displacement),
+                       _series_time_increment(velocity))
+
+    delays = {}
+    for label, raw_delay in raw_delays.items():
+        delay = raw_delay
+        if bin_size > 1.0e-20:
+            delay = int(math.floor(raw_delay / bin_size + 0.5)) * bin_size
+        delays[label] = delay
+
+    min_delay = min(delays.values())
+    if abs(min_delay) > 1.0e-20:
+        delays = dict((label, delay - min_delay)
+                      for label, delay in delays.items())
+
+    unique_delays = sorted(set(['%.12g' % delay for delay in delays.values()]))
+    max_delay = max(delays.values()) if delays else 0.0
+    stats = {
+        'mode': 'Traveling',
+        'propagation_vector': direction,
+        'apparent_velocity': speed,
+        'min_delay': min(delays.values()) if delays else 0.0,
+        'max_delay': max_delay,
+        'delay_bins': len(unique_delays),
+        'delay_bin_size': bin_size,
+    }
+    if report is not None:
+        report.add('SeismicInput', 'arrival_mode', 'Traveling')
+        report.add('SeismicInput', 'propagation_unit_vector', direction)
+        report.add('SeismicInput', 'apparent_velocity', speed)
+        report.add('SeismicInput', 'arrival_delay_min', stats['min_delay'])
+        report.add('SeismicInput', 'arrival_delay_max', stats['max_delay'])
+        report.add('SeismicInput', 'arrival_delay_bins', stats['delay_bins'])
+        report.add('SeismicInput', 'arrival_delay_bin_size', bin_size)
+    return delays, stats
+
+
 def _delete_prefixed_items(container, prefixes):
     for name in list(container.keys()):
         for prefix in prefixes:
@@ -1729,7 +1889,9 @@ def set_field_outputs(model, save_num):
 
 def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
                        wave_type, theta, vertical_axis, model_dimension='3D',
-                       node_params=None, report=None):
+                       node_params=None, wave_input_mode='Uniform',
+                       propagation_vector=None, apparent_wave_velocity=0.0,
+                       delay_bin_size=0.0, report=None):
     step_name = 'Step-dynamic'
     if step_name not in model.steps.keys():
         print('Warning: dynamic step not found; seismic load skipped.')
@@ -1741,9 +1903,17 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
     displacement = motion['displacement']
     velocity = motion['velocity']
     direction = _unit_vector(theta)
+    if propagation_vector is None:
+        propagation_vector = _vertical_axis_vector(vertical_axis)
+    arrival_delays, delay_stats = _node_arrival_delays(
+        boundary_faces, propagation_vector, apparent_wave_velocity,
+        delay_bin_size, displacement, velocity, wave_input_mode,
+        report=report)
     if report is not None:
         report.add('SeismicInput', 'direction_unit_vector', direction)
         report.add('SeismicInput', 'wave_type', wave_type)
+        report.add('SeismicInput', 'input_mode',
+                   delay_stats.get('mode', 'Uniform'))
         report.add('SeismicInput', 'points',
                    min(len(displacement), len(velocity)))
 
@@ -1789,19 +1959,22 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
                     stiffness = influence * local_params[stiffness_key]
                     dashpot = influence * local_params[dashpot_key]
                     material_name = local_params.get('material', 'Material')
+                    delay = arrival_delays.get(node.label, 0.0)
                     key = ('%.12g' % stiffness, '%.12g' % dashpot,
-                           material_name)
+                           material_name, '%.12g' % delay)
                     grouped.setdefault(key, []).append(node)
 
             for index, key in enumerate(sorted(grouped.keys()), 1):
                 group_nodes = grouped[key]
                 stiffness = float(key[0])
                 dashpot = float(key[1])
+                delay = float(key[3])
                 force_data, max_force = _force_series(
                     displacement, velocity, stiffness, dashpot, factor)
                 if max_force <= 1.0e-20:
                     skipped_zero += 1
                     continue
+                force_data = _delay_force_data(force_data, delay)
 
                 group_set = 'SD_EQ_Group_%s_%s_%03d' % (
                     face_name, comp_name, index)
@@ -1827,8 +2000,8 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
                     distributionType=UNIFORM, field='',
                     localCsys=None, amplitude=amp_name)
                 created_loads += 1
-                print('Created seismic equivalent load: %s DOF=%d nodes=%d max|F|=%.6g' %
-                      (load_name, dof, len(group_nodes), max_force))
+                print('Created seismic equivalent load: %s DOF=%d nodes=%d delay=%.6g max|F|=%.6g' %
+                      (load_name, dof, len(group_nodes), delay, max_force))
 
     print('Created seismic equivalent boundary loads: %d (skipped zero groups: %d).' %
           (created_loads, skipped_zero))
