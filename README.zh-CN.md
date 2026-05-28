@@ -2,7 +2,9 @@
 
 [English README](README.md)
 
-当前版本：`0.3.0`
+当前开发版本：`0.4.0-dev`
+
+最新稳定版本：`0.3.0`
 
 StaticDynamic 是一个 Abaqus/CAE Python 插件，用于土体静动力转换和粘弹性人工边界施加。当前版本重点支持复杂土-结构模型的外部地应力平衡结果导入，再由插件完成边界节点识别、反力读取、粘弹性边界施加和静力反力回填。
 
@@ -71,7 +73,7 @@ Abaqus/CAE 对话框将模型参数、地应力反力来源、动力分析参数
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.3.0`。
+重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.4.0-dev`。
 
 ## 基本流程
 
@@ -163,12 +165,31 @@ F(t) = K_node * u_g(t) + C_node * v_g(t)
 
 其中 `u_g(t)` 和 `v_g(t)` 是换算到模型单位后的位移和速度时程。若只提供加速度或速度记录，插件会用梯形积分生成缺失的低阶时程。`Incident Vector` 用于控制全局输入方向，负号可用于反向输入。
 
+### 行波输入
+
+`0.4.0-dev` 已开始加入入射波到时差输入：
+
+- `Input Mode = Uniform`：所有人工边界节点使用同一条时程。
+- `Input Mode = Traveling`：按边界节点到时差分组施加时程。
+- `Incident Vector`：运动或等效荷载方向。
+- `Propagation Vector`：波传播方向，用于计算到时差。
+- `Apparent Velocity`：表观传播速度，单位为模型长度单位/秒。
+- `Delay Bin Size`：到时差分组间隔；填 `0` 时自动使用波形时间步长。
+
+节点 `x_i` 的到时差计算为：
+
+```text
+tau_i = ((x_i - x_ref) dot n) / c_app
+F_i(t) = K_i * u_g(t - tau_i) + C_i * v_g(t - tau_i)
+```
+
+其中 `n` 为归一化后的 `Propagation Vector`，`c_app` 为 `Apparent
+Velocity`，`x_ref` 为最先到达的边界投影位置。这个功能是空间到时差修正，还不是完整自由场散射求解。
+
 ## 后续路线
 
-下一阶段按 `v0.4.0` 规划，重点优化更真实的地震波输入：
+`v0.4.0` 后续继续优化更真实的地震波输入：
 
-- 入射波方向控制，不只使用统一全局向量。
-- 边界不同位置的到时差，考虑波沿底面和侧边界传播。
 - 场地反应前处理，支持基岩输入、自由场输入和土层放大关系。
 - PEER 地震波选择、调幅、单位和峰值检查流程。
 - 水平双分量和竖向分量组合输入的一致性检查。

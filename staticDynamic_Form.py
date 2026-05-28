@@ -72,6 +72,10 @@ class StaticDynamicForm(AFXForm):
         self.stepNameKw = AFXStringKeyword(self.cmd, 'stepName', True, 'Step-geo')
         self.wave111Kw = AFXStringKeyword(self.cmd, 'wave111', True, 'P')
         self.theta_aKw = AFXStringKeyword(self.cmd, 'theta_a', True, '0,1,0')
+        self.waveInputModeKw = AFXStringKeyword(self.cmd, 'waveInputMode', True, 'Uniform')
+        self.propagationVectorKw = AFXStringKeyword(self.cmd, 'propagationVector', True, '')
+        self.apparentWaveVelocityKw = AFXFloatKeyword(self.cmd, 'apparentWaveVelocity', True, 0.0)
+        self.delayBinSizeKw = AFXFloatKeyword(self.cmd, 'delayBinSize', True, 0.0)
         self.t_timeKw = AFXFloatKeyword(self.cmd, 't_time', True, 20.0)
         self.d_timeKw = AFXFloatKeyword(self.cmd, 'd_time', True, 0.01)
         self.iterationsNumKw = AFXIntKeyword(self.cmd, 'iterationsNum', True, 20)
@@ -113,6 +117,13 @@ class StaticDynamicForm(AFXForm):
         if seismic and self.functionOptionKw.getValue() != 'Seismic':
             _err('Seismic Load requires Function Option = Seismic.')
             return False
+        if seismic and self.waveInputModeKw.getValue() == 'Traveling':
+            if self.apparentWaveVelocityKw.getValue() <= 0.0:
+                _err('Traveling wave input requires Apparent Velocity greater than 0.')
+                return False
+        if seismic and self.delayBinSizeKw.getValue() < 0.0:
+            _err('Delay Bin Size cannot be negative.')
+            return False
         geostatic_file = self.geostaticFileKw.getValue()
         if spring and (not geostatic_file or not os.path.isfile(geostatic_file)):
             _err('Spring Damping requires a valid geostatic ODB or CSV file.')
@@ -145,7 +156,7 @@ class StaticDynamicDialog(AFXDataDialog):
         AFXDataDialog.__init__(self, owner, 'Static-Dynamic Analysis',
                                self.OK | self.CANCEL,
                                DIALOG_ACTIONS_SEPARATOR | DIALOG_NORMAL,
-                               0, 0, 720, 620)
+                               0, 0, 720, 700)
         self.owner = owner
         self.db = StaticDynamicDB(self)
         form = owner
@@ -291,6 +302,34 @@ class StaticDynamicDialog(AFXDataDialog):
         self.thetaTxt = AFXTextField(row, 20, '', form.theta_aKw, 0,
                                      AFXTEXTFIELD_STRING | LAYOUT_FILL_X)
         self.thetaTxt.setText('0,1,0')
+
+        row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
+        FXLabel(row, 'Input Mode:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
+        self.waveInputModeCmb = AFXComboBox(
+            row, 10, 2, '', form.waveInputModeKw, 0, LAYOUT_FILL_X)
+        self.waveInputModeCmb.appendItem('Uniform')
+        self.waveInputModeCmb.appendItem('Traveling')
+        self.waveInputModeCmb.setCurrentItem(0)
+
+        row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
+        FXLabel(row, 'Propagation Vector:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
+        self.propagationTxt = AFXTextField(
+            row, 20, '', form.propagationVectorKw, 0,
+            AFXTEXTFIELD_STRING | LAYOUT_FILL_X)
+
+        row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
+        FXLabel(row, 'Apparent Velocity:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
+        self.apparentVelocitySpin = AFXFloatSpinner(
+            row, 10, '', form.apparentWaveVelocityKw, 0)
+        self.apparentVelocitySpin.setRange(0.0, 1.0e12)
+        self.apparentVelocitySpin.setValue(0.0)
+
+        row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
+        FXLabel(row, 'Delay Bin Size:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
+        self.delayBinSpin = AFXFloatSpinner(
+            row, 10, '', form.delayBinSizeKw, 0)
+        self.delayBinSpin.setRange(0.0, 1.0e6)
+        self.delayBinSpin.setValue(0.0)
 
         row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
         FXLabel(row, 'Model Length Unit:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
@@ -460,6 +499,10 @@ class StaticDynamicDialog(AFXDataDialog):
             self.stepTypeCmb,
             self.waveCmb,
             self.thetaTxt,
+            self.waveInputModeCmb,
+            self.propagationTxt,
+            self.apparentVelocitySpin,
+            self.delayBinSpin,
             self.modelLengthUnitCmb,
             self.tTimeSpin,
             self.dTimeSpin,
