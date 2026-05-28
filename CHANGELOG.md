@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0-dev - Unreleased
+## 0.4.0 - 2026-05-28
 
 - Added traveling-wave seismic input mode with spatial arrival-time delay.
 - Added separate `Propagation Vector`, `Apparent Velocity`, and optional
@@ -13,8 +13,8 @@
   safety guard, and P/S incident-direction consistency warnings.
 - Added `LayeredSite` input mode with model-derived vertical `Vs` travel-time
   delays and `SeismicSiteProfile.csv` audit export.
-- Kept equivalent-linear site response and free-field column coupling as the
-  next `0.4.0` module.
+- Left equivalent-linear site response and free-field column coupling as the
+  next `0.5.0` target.
 
 ## 0.3.0 - 2026-05-26
 

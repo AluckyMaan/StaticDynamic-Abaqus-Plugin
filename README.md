@@ -2,14 +2,14 @@
 
 [中文说明](README.zh-CN.md)
 
-Current development version: `0.4.0-dev`
+Current release version: `0.4.0`
 
-Latest stable release: `0.3.0`
+Latest stable release: `0.4.0`
 
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
 <p align="center">
-  <img src="docs/assets/v0.4.0-dev-release-hero.svg" alt="StaticDynamic v0.4.0-dev traveling-wave PEER seismic input" width="900">
+  <img src="docs/assets/v0.4.0-release-hero.svg" alt="StaticDynamic v0.4.0 traveling-wave PEER seismic input" width="900">
 </p>
 
 The current implementation focuses on a practical CAE workflow:
@@ -31,7 +31,7 @@ weighted viscous-spring artificial boundaries. Boundary nodes are grouped by
 face or edge, soil material contribution, and tributary area or length.
 
 <p align="center">
-  <img src="docs/assets/v0.4.0-dev-static-dynamic-workflow.svg" alt="StaticDynamic v0.4.0-dev workflow: boundary detection, geostatic balance, PEER wave input, traveling-wave delay, and equivalent loads" width="900">
+  <img src="docs/assets/v0.4.0-static-dynamic-workflow.svg" alt="StaticDynamic v0.4.0 workflow: boundary detection, geostatic balance, PEER wave input, traveling-wave delay, and equivalent loads" width="900">
 </p>
 
 ### GUI Workflow
@@ -63,7 +63,7 @@ features visible in the interaction display.
 
 ## Status
 
-This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Layered soil boundary grouping is implemented for common horizontal layered models by reading adjacent boundary element materials. Version `0.3.0` added practical PEER earthquake-motion input through equivalent spring-dashpot boundary nodal forces. The `0.4.0-dev` line starts improving incident-wave input with spatial arrival-time delay.
+This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Layered soil boundary grouping is implemented for common horizontal layered models by reading adjacent boundary element materials. Version `0.3.0` added practical PEER earthquake-motion input through equivalent spring-dashpot boundary nodal forces. Version `0.4.0` improves incident-wave input with spatial arrival-time delay and a first layered-site travel-time mode.
 
 ## Supported Environment
 
@@ -79,7 +79,7 @@ Copy this repository folder into an Abaqus plugin search path, for example:
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.4.0-dev` in the plugin menu.
+Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.4.0` in the plugin menu.
 
 ## Basic Workflow
 
@@ -153,7 +153,7 @@ defined by `Incident Vector`; use a negative component to reverse direction.
 
 ### Traveling-Wave Input
 
-The `0.4.0-dev` line adds a first incident-wave input mode:
+Version `0.4.0` adds a first incident-wave input mode:
 
 - `Input Mode = Uniform`: all artificial-boundary nodes use the same record.
 - `Input Mode = Traveling`: boundary nodes are grouped by arrival delay.
@@ -195,7 +195,7 @@ deconvolution, or full free-field column coupling.
 
 ## Roadmap
 
-The remaining `v0.4.0` development target is more realistic earthquake input:
+The next `v0.5.0` development target is a more complete earthquake-input workbench:
 
 - equivalent-linear site response and free-field column coupling
 - clearer selection and scaling workflow for PEER records before model input

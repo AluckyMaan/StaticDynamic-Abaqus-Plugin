@@ -20,7 +20,7 @@ except ImportError:
 # Abaqus also exports a name called sum; the plugin needs Python's numeric sum.
 sum = _builtins.sum
 
-__version__ = '0.4.0-dev'
+__version__ = '0.4.0'
 MAX_TRAVELING_DELAY_BINS = 200
 
 

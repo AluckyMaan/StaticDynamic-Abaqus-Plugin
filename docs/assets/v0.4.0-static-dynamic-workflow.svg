@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
-  <title id="title">StaticDynamic v0.4.0-dev workflow</title>
+  <title id="title">StaticDynamic v0.4.0 workflow</title>
   <desc id="desc">Workflow from boundary detection and geostatic balance through PEER earthquake input, traveling-wave delay, and equivalent boundary loads.</desc>
   <defs>
     <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
@@ -22,7 +22,7 @@
   </defs>
 
   <rect width="1200" height="540" fill="url(#panel)"/>
-  <text x="60" y="58" class="title">StaticDynamic v0.4.0-dev Workflow</text>
+  <text x="60" y="58" class="title">StaticDynamic v0.4.0 Workflow</text>
   <text x="60" y="86" class="subtitle">From balanced geostatic model to PEER earthquake input with traveling-wave arrival delay</text>
 
   <g transform="translate(55,130)">
@@ -123,5 +123,5 @@
   </g>
 
   <rect x="60" y="485" width="1080" height="34" rx="7" fill="#dceef7" stroke="#b8d4e5"/>
-  <text x="82" y="507" class="note">Stable v0.3.0 provides PEER equivalent input. v0.4.0-dev adds propagation vector, apparent velocity, and arrival-time delay.</text>
+  <text x="82" y="507" class="note">Stable v0.4.0 provides PEER equivalent input, propagation delay, and layered-site arrival-time audit.</text>
 </svg>

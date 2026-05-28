@@ -92,7 +92,7 @@ spatially variable wave arrival along the boundary.
 
 ## Traveling-Wave Arrival Delay
 
-The `0.4.0-dev` line adds a first spatial correction for incident-wave input.
+Version `0.4.0` adds a first spatial correction for incident-wave input.
 The motion direction and propagation direction are treated separately:
 
 - `Incident Vector` defines the global force or motion component.

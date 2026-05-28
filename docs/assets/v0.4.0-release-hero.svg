@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
-  <title id="title">StaticDynamic v0.4.0-dev traveling-wave seismic input</title>
+  <title id="title">StaticDynamic v0.4.0 traveling-wave seismic input</title>
   <desc id="desc">PEER earthquake records are converted to model units, delayed by incident wave propagation, and applied as equivalent viscous-spring boundary loads.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -44,7 +44,7 @@
   <path d="M0 548 C220 505 333 620 540 562 C765 498 910 570 1200 515 L1200 650 L0 650 Z" fill="#e9f2f4" opacity="0.92"/>
   <path d="M0 590 C260 558 390 640 614 594 C806 555 980 602 1200 560 L1200 650 L0 650 Z" fill="#cddfe5" opacity="0.88"/>
 
-  <text x="70" y="80" class="title">StaticDynamic v0.4.0-dev</text>
+  <text x="70" y="80" class="title">StaticDynamic v0.4.0</text>
   <text x="74" y="117" class="subtitle">PEER unit conversion + traveling-wave arrival delay + equivalent boundary loads</text>
 
   <g filter="url(#shadow)">
