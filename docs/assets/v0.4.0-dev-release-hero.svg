@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">StaticDynamic v0.4.0-dev traveling-wave seismic input</title>
+  <desc id="desc">PEER earthquake records are converted to model units, delayed by incident wave propagation, and applied as equivalent viscous-spring boundary loads.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071522"/>
+      <stop offset="0.52" stop-color="#10253a"/>
+      <stop offset="1" stop-color="#172d2a"/>
+    </linearGradient>
+    <linearGradient id="soilTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9b36b"/>
+      <stop offset="1" stop-color="#b98645"/>
+    </linearGradient>
+    <linearGradient id="soilBottom" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a83a8"/>
+      <stop offset="1" stop-color="#24526f"/>
+    </linearGradient>
+    <linearGradient id="load" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#41d6ff"/>
+      <stop offset="1" stop-color="#82f7b5"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#67d7ff"/>
+    </marker>
+    <style>
+      .title { font: 700 54px Arial, Helvetica, sans-serif; fill: #f8fbff; }
+      .subtitle { font: 500 22px Arial, Helvetica, sans-serif; fill: #b9d7e8; }
+      .small { font: 500 15px Arial, Helvetica, sans-serif; fill: #d7ecf7; }
+      .label { font: 700 18px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .muted { font: 500 13px Arial, Helvetica, sans-serif; fill: #9bb8c9; }
+      .card { fill: rgba(255,255,255,0.08); stroke: rgba(255,255,255,0.18); stroke-width: 1.2; }
+      .cyan { fill: #5ee4ff; }
+      .green { fill: #82f7b5; }
+      .orange { fill: #ffd28a; }
+      .pink { fill: #ff86d8; }
+      .grid { stroke: rgba(255,255,255,0.18); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="650" fill="url(#bg)"/>
+  <path d="M0 548 C220 505 333 620 540 562 C765 498 910 570 1200 515 L1200 650 L0 650 Z" fill="#e9f2f4" opacity="0.92"/>
+  <path d="M0 590 C260 558 390 640 614 594 C806 555 980 602 1200 560 L1200 650 L0 650 Z" fill="#cddfe5" opacity="0.88"/>
+
+  <text x="70" y="80" class="title">StaticDynamic v0.4.0-dev</text>
+  <text x="74" y="117" class="subtitle">PEER unit conversion + traveling-wave arrival delay + equivalent boundary loads</text>
+
+  <g filter="url(#shadow)">
+    <rect x="70" y="165" width="190" height="270" rx="8" class="card"/>
+    <text x="95" y="205" class="label">PEER records</text>
+    <g transform="translate(102,230)">
+      <rect width="104" height="42" rx="6" fill="#eff7ff"/>
+      <text x="16" y="27" font-family="Arial" font-size="18" font-weight="700" fill="#2f73b8">.AT2</text>
+      <text x="66" y="27" font-family="Arial" font-size="14" fill="#445">g</text>
+      <rect y="56" width="104" height="42" rx="6" fill="#effff4"/>
+      <text x="16" y="83" font-family="Arial" font-size="18" font-weight="700" fill="#2b9654">.VT2</text>
+      <text x="66" y="83" font-family="Arial" font-size="14" fill="#445">cm/s</text>
+      <rect y="112" width="104" height="42" rx="6" fill="#fff5e5"/>
+      <text x="16" y="139" font-family="Arial" font-size="18" font-weight="700" fill="#b37422">.DT2</text>
+      <text x="66" y="139" font-family="Arial" font-size="14" fill="#445">cm</text>
+    </g>
+    <text x="95" y="416" class="muted">model length unit: m / cm / mm</text>
+  </g>
+
+  <path d="M280 295 C330 295 340 260 392 260" stroke="#67d7ff" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+  <path d="M280 332 C330 332 340 365 392 365" stroke="#67d7ff" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="390" y="190" width="245" height="95" rx="8" class="card"/>
+    <text x="415" y="226" class="label">Unit conversion</text>
+    <text x="415" y="254" class="small">g, cm/s, cm to model units</text>
+
+    <rect x="390" y="325" width="245" height="120" rx="8" class="card"/>
+    <text x="415" y="361" class="label">Input mode</text>
+    <text x="415" y="389" class="small">Uniform: same record</text>
+    <text x="415" y="416" class="small">Traveling: delayed record</text>
+  </g>
+
+  <path d="M654 308 C700 308 725 308 770 308" stroke="#67d7ff" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+
+  <g transform="translate(770,190)" filter="url(#shadow)">
+    <polygon points="95,20 300,72 300,242 95,302 -95,238 -95,70" fill="#223b4d" stroke="#7be6ff" stroke-width="2"/>
+    <polygon points="95,20 300,72 95,132 -95,70" fill="url(#soilTop)" stroke="#7be6ff" stroke-width="2"/>
+    <polygon points="-95,70 95,132 95,302 -95,238" fill="url(#soilBottom)" stroke="#7be6ff" stroke-width="2"/>
+    <polygon points="95,132 300,72 300,242 95,302" fill="#2d6f82" stroke="#7be6ff" stroke-width="2"/>
+    <g opacity="0.62">
+      <path d="M-65 80 L125 142 M-35 70 L155 132 M-5 60 L185 122 M25 50 L215 112 M55 40 L245 102" class="grid"/>
+      <path d="M-75 105 L100 160 M-80 145 L95 200 M-85 185 L90 240 M-90 225 L85 280" class="grid"/>
+      <path d="M128 145 L292 96 M130 182 L292 134 M132 219 L293 172 M134 256 L294 210" class="grid"/>
+    </g>
+
+    <g stroke="#ff86d8" stroke-width="2" fill="none">
+      <path d="M-118 98 h35" marker-end="url(#arrow)"/>
+      <path d="M-122 142 h35" marker-end="url(#arrow)"/>
+      <path d="M-126 186 h35" marker-end="url(#arrow)"/>
+      <path d="M-130 230 h35" marker-end="url(#arrow)"/>
+      <path d="M322 102 h-35" marker-end="url(#arrow)"/>
+      <path d="M326 146 h-35" marker-end="url(#arrow)"/>
+      <path d="M330 190 h-35" marker-end="url(#arrow)"/>
+      <path d="M334 234 h-35" marker-end="url(#arrow)"/>
+    </g>
+    <g stroke="url(#load)" stroke-width="4" fill="none" marker-end="url(#arrow)">
+      <path d="M-45 28 C12 -25 113 -28 176 18"/>
+      <path d="M-18 330 C52 386 175 380 255 300"/>
+    </g>
+    <text x="-70" y="342" class="small">tau = distance / c_app</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="820" y="505" width="300" height="76" rx="8" fill="#0d2f37" stroke="#82f7b5" stroke-width="1.4"/>
+    <text x="845" y="536" class="label">Equivalent boundary input</text>
+    <text x="845" y="562" class="small">F(t)=K·u(t-tau)+C·v(t-tau)</text>
+  </g>
+
+  <g transform="translate(78,520)">
+    <rect width="560" height="60" rx="8" fill="rgba(6,16,25,0.55)" stroke="rgba(255,255,255,0.15)"/>
+    <text x="22" y="25" class="small"><tspan class="cyan">Uniform</tspan> input remains available for v0.3.0-style workflows.</text>
+    <text x="22" y="47" class="small"><tspan class="green">Traveling</tspan> input adds propagation vector, apparent velocity, and delay bins.</text>
+  </g>
+</svg>

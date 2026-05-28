@@ -9,7 +9,7 @@ Latest stable release: `0.3.0`
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
 <p align="center">
-  <img src="docs/assets/v0.2.0-release-hero.png" alt="StaticDynamic v0.2.0 layered viscous-spring boundary conversion" width="900">
+  <img src="docs/assets/v0.4.0-dev-release-hero.svg" alt="StaticDynamic v0.4.0-dev traveling-wave PEER seismic input" width="900">
 </p>
 
 The current implementation focuses on a practical CAE workflow:
@@ -31,7 +31,7 @@ weighted viscous-spring artificial boundaries. Boundary nodes are grouped by
 face or edge, soil material contribution, and tributary area or length.
 
 <p align="center">
-  <img src="docs/assets/v0.2.0-static-dynamic-workflow.svg" alt="StaticDynamic program workflow: boundary detection, geostatic reaction input, balance check, layered grouping, boundary conversion" width="900">
+  <img src="docs/assets/v0.4.0-dev-static-dynamic-workflow.svg" alt="StaticDynamic v0.4.0-dev workflow: boundary detection, geostatic balance, PEER wave input, traveling-wave delay, and equivalent loads" width="900">
 </p>
 
 ### GUI Workflow

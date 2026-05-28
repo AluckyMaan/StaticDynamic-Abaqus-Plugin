@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
+  <title id="title">StaticDynamic v0.4.0-dev workflow</title>
+  <desc id="desc">Workflow from boundary detection and geostatic balance through PEER earthquake input, traveling-wave delay, and equivalent boundary loads.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#e9f3f8"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#3679b8"/>
+    </marker>
+    <style>
+      .title { font: 700 34px Arial, Helvetica, sans-serif; fill: #10223a; }
+      .subtitle { font: 500 16px Arial, Helvetica, sans-serif; fill: #4e6b80; }
+      .card { fill: #ffffff; stroke: #b8cbe0; stroke-width: 1.6; }
+      .head { font: 700 18px Arial, Helvetica, sans-serif; fill: #10223a; }
+      .body { font: 500 13px Arial, Helvetica, sans-serif; fill: #355166; }
+      .tag { font: 700 12px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .note { font: 500 14px Arial, Helvetica, sans-serif; fill: #26485b; }
+      .arrow { stroke: #3679b8; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="540" fill="url(#panel)"/>
+  <text x="60" y="58" class="title">StaticDynamic v0.4.0-dev Workflow</text>
+  <text x="60" y="86" class="subtitle">From balanced geostatic model to PEER earthquake input with traveling-wave arrival delay</text>
+
+  <g transform="translate(55,130)">
+    <rect width="148" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="56" height="22" rx="11" fill="#486f9f"/>
+    <text x="30" y="34" class="tag">CAE</text>
+    <text x="18" y="62" class="head">Boundary</text>
+    <text x="18" y="87" class="body">detect 5 faces</text>
+    <text x="18" y="108" class="body">or 3 edges</text>
+  </g>
+
+  <path d="M218 189 H275" class="arrow"/>
+
+  <g transform="translate(285,130)">
+    <rect width="148" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="56" height="22" rx="11" fill="#7a9b42"/>
+    <text x="29" y="34" class="tag">ODB</text>
+    <text x="18" y="62" class="head">Balance</text>
+    <text x="18" y="87" class="body">read RF</text>
+    <text x="18" y="108" class="body">check Umax</text>
+  </g>
+
+  <path d="M448 189 H505" class="arrow"/>
+
+  <g transform="translate(515,130)">
+    <rect width="148" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="62" height="22" rx="11" fill="#b7792f"/>
+    <text x="30" y="34" class="tag">PEER</text>
+    <text x="18" y="62" class="head">Wave Data</text>
+    <text x="18" y="87" class="body">AT2 / VT2 / DT2</text>
+    <text x="18" y="108" class="body">unit conversion</text>
+  </g>
+
+  <path d="M678 189 H735" class="arrow"/>
+
+  <g transform="translate(745,130)">
+    <rect width="148" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="78" height="22" rx="11" fill="#3c8ca8"/>
+    <text x="31" y="34" class="tag">INPUT</text>
+    <text x="18" y="62" class="head">Mode</text>
+    <text x="18" y="87" class="body">Uniform</text>
+    <text x="18" y="108" class="body">Traveling</text>
+  </g>
+
+  <path d="M908 189 H965" class="arrow"/>
+
+  <g transform="translate(975,130)">
+    <rect width="148" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="80" height="22" rx="11" fill="#8b5bb7"/>
+    <text x="31" y="34" class="tag">DELAY</text>
+    <text x="18" y="62" class="head">Arrival</text>
+    <text x="18" y="87" class="body">tau = x dot n / c</text>
+    <text x="18" y="108" class="body">delay bins</text>
+  </g>
+
+  <path d="M1049 260 C1049 302 161 302 161 334" class="arrow"/>
+
+  <g transform="translate(55,345)">
+    <rect width="222" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="76" height="22" rx="11" fill="#3b9a77"/>
+    <text x="32" y="34" class="tag">SOIL</text>
+    <text x="18" y="62" class="head">Material Groups</text>
+    <text x="18" y="87" class="body">layered node contributions</text>
+    <text x="18" y="108" class="body">tributary area or length</text>
+  </g>
+
+  <path d="M292 404 H365" class="arrow"/>
+
+  <g transform="translate(375,345)">
+    <rect width="245" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="88" height="22" rx="11" fill="#b35a7e"/>
+    <text x="31" y="34" class="tag">LOADS</text>
+    <text x="18" y="62" class="head">Equivalent Input</text>
+    <text x="18" y="87" class="body">F = K u(t-tau) + C v(t-tau)</text>
+    <text x="18" y="108" class="body">TabularAmplitude + CF loads</text>
+  </g>
+
+  <path d="M635 404 H708" class="arrow"/>
+
+  <g transform="translate(718,345)">
+    <rect width="220" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="76" height="22" rx="11" fill="#5272c4"/>
+    <text x="32" y="34" class="tag">JOB</text>
+    <text x="18" y="62" class="head">Dynamic Step</text>
+    <text x="18" y="87" class="body">implicit or explicit</text>
+    <text x="18" y="108" class="body">optional submit</text>
+  </g>
+
+  <path d="M953 404 H1018" class="arrow"/>
+
+  <g transform="translate(1028,345)">
+    <rect width="118" height="118" rx="8" class="card"/>
+    <rect x="18" y="18" width="72" height="22" rx="11" fill="#3c6f82"/>
+    <text x="30" y="34" class="tag">AUDIT</text>
+    <text x="18" y="62" class="head">Reports</text>
+    <text x="18" y="87" class="body">run CSV</text>
+    <text x="18" y="108" class="body">delay stats</text>
+  </g>
+
+  <rect x="60" y="485" width="1080" height="34" rx="7" fill="#dceef7" stroke="#b8d4e5"/>
+  <text x="82" y="507" class="note">Stable v0.3.0 provides PEER equivalent input. v0.4.0-dev adds propagation vector, apparent velocity, and arrival-time delay.</text>
+</svg>
