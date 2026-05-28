@@ -52,6 +52,19 @@ def _geostatic_extension_matches(source, path):
     return True
 
 
+def _nonzero_vector_text(text, allow_empty=True):
+    raw = str(text or '').strip()
+    if not raw:
+        return allow_empty
+    try:
+        vals = [float(item.strip()) for item in raw.split(',')]
+        if len(vals) != 3:
+            return False
+        return sum([item * item for item in vals]) > 1.0e-20
+    except Exception:
+        return False
+
+
 class StaticDynamicForm(AFXForm):
     def __init__(self, owner):
         AFXForm.__init__(self, owner)
@@ -117,9 +130,16 @@ class StaticDynamicForm(AFXForm):
         if seismic and self.functionOptionKw.getValue() != 'Seismic':
             _err('Seismic Load requires Function Option = Seismic.')
             return False
+        if seismic and not _nonzero_vector_text(self.theta_aKw.getValue(),
+                                                allow_empty=False):
+            _err('Incident Vector must be a non-zero x,y,z vector.')
+            return False
         if seismic and self.waveInputModeKw.getValue() == 'Traveling':
             if self.apparentWaveVelocityKw.getValue() <= 0.0:
                 _err('Traveling wave input requires Apparent Velocity greater than 0.')
+                return False
+            if not _nonzero_vector_text(self.propagationVectorKw.getValue()):
+                _err('Propagation Vector must be a non-zero x,y,z vector.')
                 return False
         if seismic and self.delayBinSizeKw.getValue() < 0.0:
             _err('Delay Bin Size cannot be negative.')
@@ -309,6 +329,7 @@ class StaticDynamicDialog(AFXDataDialog):
             row, 10, 2, '', form.waveInputModeKw, 0, LAYOUT_FILL_X)
         self.waveInputModeCmb.appendItem('Uniform')
         self.waveInputModeCmb.appendItem('Traveling')
+        self.waveInputModeCmb.appendItem('LayeredSite')
         self.waveInputModeCmb.setCurrentItem(0)
 
         row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)

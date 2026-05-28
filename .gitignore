@@ -26,6 +26,8 @@ __pycache__/
 dialog_debug.log
 NodeInfo.csv
 BoundaryInfo.csv
+SeismicArrivalInfo.csv
+SeismicSiteProfile.csv
 StaticDynamic_run_report.txt
 StaticDynamic_run_report.csv
 SD_*_check*.txt

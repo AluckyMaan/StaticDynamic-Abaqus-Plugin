@@ -12,7 +12,16 @@ from caeModules import *
 import regionToolset
 import staticDynamicDB
 
+try:
+    import __builtin__ as _builtins
+except ImportError:
+    import builtins as _builtins
+
+# Abaqus also exports a name called sum; the plugin needs Python's numeric sum.
+sum = _builtins.sum
+
 __version__ = '0.4.0-dev'
+MAX_TRAVELING_DELAY_BINS = 200
 
 
 class StaticDynamicRunReport(object):
@@ -116,12 +125,21 @@ def _report_inputs(report, kwargs):
         report.add('Input', name, kwargs[name])
 
 
+def _vector_magnitude(vector):
+    try:
+        vals = [float(item) for item in vector]
+    except Exception:
+        return 0.0
+    return math.sqrt(sum([item * item for item in vals]))
+
+
 def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                           NodeSet, NodeInfo, SpringDamping, SeismicLoad,
                           function_option,
                           geostatic_file_type, geostatic_file, step_name,
                           balance_tolerance, geo_type, wave_file,
-                          model_length_unit, wave_input_mode,
+                          model_length_unit, incident_vector,
+                          wave_input_mode, propagation_vector,
                           apparent_wave_velocity, delay_bin_size, report):
     errors = []
     warnings = []
@@ -186,6 +204,9 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
         except Exception:
             errors.append('Unsupported Model Length Unit "%s"; use m, cm, or mm.' %
                           model_length_unit)
+        incident = _parse_vector_components(incident_vector)
+        if incident is None or _vector_magnitude(incident) <= 1.0e-20:
+            errors.append('Incident Vector must be a non-zero x,y,z vector.')
         mode = normalize_wave_input_mode(wave_input_mode)
         if mode == 'Traveling':
             try:
@@ -193,6 +214,12 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                     errors.append('Traveling wave input requires Apparent Velocity greater than 0.')
             except Exception:
                 errors.append('Traveling wave input requires a numeric Apparent Velocity.')
+            if str(propagation_vector or '').strip():
+                propagation = _parse_vector_components(propagation_vector)
+                if propagation is None or _vector_magnitude(propagation) <= 1.0e-20:
+                    errors.append('Propagation Vector must be a non-zero x,y,z vector.')
+        elif mode == 'LayeredSite':
+            warnings.append('LayeredSite input uses model material Vs along the vertical axis; Apparent Velocity is ignored.')
         try:
             if float(delay_bin_size) < 0.0:
                 errors.append('Delay Bin Size cannot be negative.')
@@ -201,12 +228,15 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
 
     for message in warnings:
         print('Warning: ' + message)
-        report.add_message('WARNING', message)
+        if report is not None:
+            report.add_message('WARNING', message)
     for message in errors:
         print('Error: ' + message)
-        report.add_message('ERROR', message)
-    report.add('Preflight', 'errors', len(errors))
-    report.add('Preflight', 'warnings', len(warnings))
+        if report is not None:
+            report.add_message('ERROR', message)
+    if report is not None:
+        report.add('Preflight', 'errors', len(errors))
+        report.add('Preflight', 'warnings', len(warnings))
     return errors, warnings
 
 def Main(functionOption='Seismic', Model_name='Model-1',
@@ -290,7 +320,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
             NodeSet, NodeInfo, SpringDamping, SeismicLoad,
             functionOption, geostaticFileType, geostaticFile, stepName,
             balanceTolerance, geoType, fileName, modelLengthUnit,
-            waveInputMode, apparentWaveVelocity, delayBinSize, report)
+            theta_a, waveInputMode, propagationVector,
+            apparentWaveVelocity, delayBinSize, report)
         if errors:
             report.set_status('FAILED')
             report.write()
@@ -498,6 +529,19 @@ def parse_theta(theta_str):
         return [0.0, 1.0, 0.0]
 
 
+def _parse_vector_components(vector_str):
+    text = str(vector_str or '').strip()
+    if not text:
+        return None
+    try:
+        vals = [float(x.strip()) for x in text.split(',')]
+        if len(vals) != 3:
+            return None
+        return vals
+    except Exception:
+        return None
+
+
 def parse_vector(vector_str, fallback):
     text = str(vector_str or '').strip()
     if not text:
@@ -524,6 +568,9 @@ def _vertical_axis_vector(vertical_axis):
 
 def normalize_wave_input_mode(mode):
     text = str(mode or 'Uniform').strip().lower()
+    compact = text.replace('-', '').replace('_', '').replace(' ', '')
+    if compact in ('layeredsite', 'site', 'sitecolumn', 'freefield'):
+        return 'LayeredSite'
     if text in ('traveling', 'travelling', 'incident', 'oblique'):
         return 'Traveling'
     return 'Uniform'
@@ -1177,6 +1224,63 @@ def export_boundary_info_csv(model, instance, boundary_faces, node_params,
     return path
 
 
+def export_seismic_arrival_info_csv(instance, boundary_faces, arrival_delays,
+                                    report=None):
+    path = os.path.join(os.path.dirname(__file__),
+                        'SeismicArrivalInfo.csv')
+    rows = 0
+    f = open(path, 'wb')
+    try:
+        writer = csv.writer(f)
+        writer.writerow([
+            'nodeLabel', 'x', 'y', 'z', 'faceName', 'arrivalDelay'
+        ])
+        for face_name in sorted(boundary_faces.keys()):
+            for node in sorted(boundary_faces[face_name],
+                               key=lambda item: item.label):
+                coords = _node_coords(node)
+                writer.writerow([
+                    node.label, coords[0], coords[1], coords[2], face_name,
+                    arrival_delays.get(node.label, 0.0)
+                ])
+                rows += 1
+    finally:
+        f.close()
+    print('Seismic arrival info exported to: %s' % path)
+    if report is not None:
+        report.add('Output', 'SeismicArrivalInfo.csv', path)
+        report.add('Output', 'SeismicArrivalInfo.rows', rows)
+    return path
+
+
+def export_seismic_site_profile_csv(profile, report=None):
+    path = os.path.join(os.path.dirname(__file__),
+                        'SeismicSiteProfile.csv')
+    rows = 0
+    f = open(path, 'wb')
+    try:
+        writer = csv.writer(f)
+        writer.writerow([
+            'verticalCoordinate', 'equivalentVs',
+            'cumulativeTravelTime', 'sampleCount'
+        ])
+        for row in profile:
+            writer.writerow([
+                row.get('coord', 0.0),
+                row.get('Vs', 0.0),
+                row.get('travelTime', 0.0),
+                row.get('samples', 0)
+            ])
+            rows += 1
+    finally:
+        f.close()
+    print('Seismic site profile exported to: %s' % path)
+    if report is not None:
+        report.add('Output', 'SeismicSiteProfile.csv', path)
+        report.add('Output', 'SeismicSiteProfile.rows', rows)
+    return path
+
+
 def check_geostatic_balance_from_odb(odb_path, instance, step_name,
                                      tolerance=1.0e-4, report=None):
     if not odb_path:
@@ -1762,11 +1866,231 @@ def _delay_force_data(force_data, delay):
     return shifted
 
 
+def _motion_delay_bin_size(delay_bin_size, displacement, velocity):
+    try:
+        bin_size = float(delay_bin_size)
+    except Exception:
+        bin_size = 0.0
+    if bin_size <= 0.0:
+        bin_size = max(_series_time_increment(displacement),
+                       _series_time_increment(velocity))
+    return bin_size
+
+
+def _bin_arrival_delays(raw_delays, bin_size):
+    delays = {}
+    for label, raw_delay in raw_delays.items():
+        delay = raw_delay
+        if bin_size > 1.0e-20:
+            delay = int(math.floor(raw_delay / bin_size + 0.5)) * bin_size
+        delays[label] = delay
+
+    if delays:
+        min_delay = min(delays.values())
+        if abs(min_delay) > 1.0e-20:
+            delays = dict((label, delay - min_delay)
+                          for label, delay in delays.items())
+    unique_delays = sorted(set(['%.12g' % delay
+                                for delay in delays.values()]))
+    return delays, unique_delays
+
+
+def _check_arrival_delay_bin_limit(unique_delays, mode_label, report=None):
+    if len(unique_delays) <= MAX_TRAVELING_DELAY_BINS:
+        return
+    message = (
+        '%s delay bins (%d) exceed the safety limit (%d). '
+        'Increase Delay Bin Size or reduce the boundary mesh density.' %
+        (mode_label, len(unique_delays), MAX_TRAVELING_DELAY_BINS))
+    if report is not None:
+        report.add_message('ERROR', message)
+    raise ValueError(message)
+
+
+def _add_face_arrival_delay_stats(boundary_faces, delays, report):
+    if report is None:
+        return
+    for face_name in sorted(boundary_faces.keys()):
+        face_delays = [
+            delays.get(node.label, 0.0)
+            for node in boundary_faces[face_name]
+        ]
+        if not face_delays:
+            continue
+        face_bins = sorted(set(['%.12g' % item for item in face_delays]))
+        report.add('SeismicInput', face_name + '.arrival_delay_min',
+                   min(face_delays))
+        report.add('SeismicInput', face_name + '.arrival_delay_max',
+                   max(face_delays))
+        report.add('SeismicInput', face_name + '.arrival_delay_bins',
+                   len(face_bins))
+
+
+def _equivalent_node_vs(node, node_params=None, fallback_params=None):
+    entries = []
+    if node_params and node.label in node_params:
+        entries = node_params[node.label]
+        if isinstance(entries, dict):
+            entries = [(entries, 1.0)]
+    if not entries and fallback_params:
+        entries = [(fallback_params, 1.0)]
+
+    total_fraction = 0.0
+    weighted_slowness = 0.0
+    for params, fraction in entries:
+        try:
+            vs = float(params.get('Vs', 0.0))
+            frac = float(fraction)
+        except Exception:
+            continue
+        if vs <= 0.0 or frac <= 0.0:
+            continue
+        total_fraction += frac
+        weighted_slowness += frac / vs
+    if total_fraction <= 0.0 or weighted_slowness <= 0.0:
+        return None
+    return total_fraction / weighted_slowness
+
+
+def _layered_site_profile_from_nodes(nodes, vertical_axis, node_params=None,
+                                     fallback_params=None):
+    axis = _axis_index(vertical_axis)
+    samples = []
+    for node in nodes:
+        vs = _equivalent_node_vs(node, node_params, fallback_params)
+        if vs is None or vs <= 0.0:
+            continue
+        samples.append((_node_coords(node)[axis], vs))
+
+    if not samples:
+        raise ValueError('LayeredSite input requires positive Vs values from model materials.')
+
+    ordered = sorted(samples, key=lambda item: item[0])
+    span = ordered[-1][0] - ordered[0][0]
+    tol = max(1.0e-9, abs(span) * 1.0e-8)
+    clusters = []
+    for coord, vs in ordered:
+        if not clusters or abs(coord - clusters[-1][-1][0]) > tol:
+            clusters.append([(coord, vs)])
+        else:
+            clusters[-1].append((coord, vs))
+
+    profile = []
+    for cluster in clusters:
+        coord = sum(item[0] for item in cluster) / float(len(cluster))
+        slowness = sum(1.0 / item[1] for item in cluster)
+        vs = float(len(cluster)) / slowness if slowness > 0.0 else 0.0
+        profile.append({
+            'coord': coord,
+            'Vs': vs,
+            'samples': len(cluster),
+            'travelTime': 0.0,
+        })
+
+    travel_time = 0.0
+    for index in range(1, len(profile)):
+        prev = profile[index - 1]
+        row = profile[index]
+        dz = abs(row['coord'] - prev['coord'])
+        travel_time += dz * 0.5 * (1.0 / prev['Vs'] + 1.0 / row['Vs'])
+        row['travelTime'] = travel_time
+    return profile
+
+
+def _profile_time_at(coord, profile):
+    if not profile:
+        return 0.0
+    if len(profile) == 1:
+        return 0.0
+    if coord <= profile[0]['coord']:
+        return profile[0]['travelTime']
+    if coord >= profile[-1]['coord']:
+        return profile[-1]['travelTime']
+    for index in range(1, len(profile)):
+        prev = profile[index - 1]
+        row = profile[index]
+        if coord <= row['coord']:
+            dz = row['coord'] - prev['coord']
+            if abs(dz) <= 1.0e-20:
+                return prev['travelTime']
+            fraction = (coord - prev['coord']) / dz
+            return prev['travelTime'] + \
+                fraction * (row['travelTime'] - prev['travelTime'])
+    return profile[-1]['travelTime']
+
+
+def _node_layered_site_arrival_delays(boundary_faces, vertical_axis,
+                                      node_params, fallback_params,
+                                      delay_bin_size, displacement, velocity,
+                                      report=None):
+    nodes = _unique_nodes_from_faces(boundary_faces)
+    if not nodes:
+        return {}, {
+            'mode': 'LayeredSite',
+            'min_delay': 0.0,
+            'max_delay': 0.0,
+            'delay_bins': 0,
+            'delay_bin_size': 0.0,
+        }
+
+    profile = _layered_site_profile_from_nodes(
+        nodes, vertical_axis, node_params, fallback_params)
+    axis = _axis_index(vertical_axis)
+    raw_delays = dict(
+        (node.label, _profile_time_at(_node_coords(node)[axis], profile))
+        for node in nodes)
+    bin_size = _motion_delay_bin_size(delay_bin_size, displacement, velocity)
+    delays, unique_delays = _bin_arrival_delays(raw_delays, bin_size)
+    _check_arrival_delay_bin_limit(
+        unique_delays, 'LayeredSite arrival', report=report)
+
+    vs_values = [row['Vs'] for row in profile]
+    max_delay = max(delays.values()) if delays else 0.0
+    stats = {
+        'mode': 'LayeredSite',
+        'min_delay': min(delays.values()) if delays else 0.0,
+        'max_delay': max_delay,
+        'delay_bins': len(unique_delays),
+        'delay_bin_size': bin_size,
+        'profile_points': len(profile),
+        'site_travel_time': profile[-1]['travelTime'] if profile else 0.0,
+        'site_vs_min': min(vs_values) if vs_values else 0.0,
+        'site_vs_max': max(vs_values) if vs_values else 0.0,
+    }
+    if report is not None:
+        report.add('SeismicInput', 'arrival_mode', 'LayeredSite')
+        report.add('SeismicInput', 'site_profile_source',
+                   'model_material_vs')
+        report.add('SeismicInput', 'site_vertical_axis',
+                   str(vertical_axis).upper())
+        report.add('SeismicInput', 'site_profile_points',
+                   stats['profile_points'])
+        report.add('SeismicInput', 'site_travel_time',
+                   stats['site_travel_time'])
+        report.add('SeismicInput', 'site_vs_min', stats['site_vs_min'])
+        report.add('SeismicInput', 'site_vs_max', stats['site_vs_max'])
+        report.add('SeismicInput', 'arrival_delay_min',
+                   stats['min_delay'])
+        report.add('SeismicInput', 'arrival_delay_max',
+                   stats['max_delay'])
+        report.add('SeismicInput', 'arrival_delay_bins',
+                   stats['delay_bins'])
+        report.add('SeismicInput', 'arrival_delay_bin_size', bin_size)
+        _add_face_arrival_delay_stats(boundary_faces, delays, report)
+    export_seismic_site_profile_csv(profile, report=report)
+    return delays, stats
+
+
 def _node_arrival_delays(boundary_faces, propagation_vector,
                          apparent_velocity, delay_bin_size,
                          displacement, velocity, wave_input_mode,
-                         report=None):
+                         node_params=None, fallback_params=None,
+                         vertical_axis='Y', report=None):
     mode = normalize_wave_input_mode(wave_input_mode)
+    if mode == 'LayeredSite':
+        return _node_layered_site_arrival_delays(
+            boundary_faces, vertical_axis, node_params, fallback_params,
+            delay_bin_size, displacement, velocity, report=report)
     if mode != 'Traveling':
         return {}, {
             'mode': 'Uniform',
@@ -1779,6 +2103,9 @@ def _node_arrival_delays(boundary_faces, propagation_vector,
     speed = float(apparent_velocity)
     if speed <= 0.0:
         raise ValueError('Traveling wave input requires Apparent Velocity greater than 0.')
+
+    if _vector_magnitude(propagation_vector) <= 1.0e-20:
+        raise ValueError('Traveling wave input requires a non-zero Propagation Vector.')
 
     nodes = _unique_nodes_from_faces(boundary_faces)
     if not nodes:
@@ -1804,27 +2131,11 @@ def _node_arrival_delays(boundary_faces, propagation_vector,
         (label, (projection - min_projection) / speed)
         for label, projection in projections.items())
 
-    try:
-        bin_size = float(delay_bin_size)
-    except Exception:
-        bin_size = 0.0
-    if bin_size <= 0.0:
-        bin_size = max(_series_time_increment(displacement),
-                       _series_time_increment(velocity))
+    bin_size = _motion_delay_bin_size(delay_bin_size, displacement, velocity)
+    delays, unique_delays = _bin_arrival_delays(raw_delays, bin_size)
+    _check_arrival_delay_bin_limit(
+        unique_delays, 'Traveling wave', report=report)
 
-    delays = {}
-    for label, raw_delay in raw_delays.items():
-        delay = raw_delay
-        if bin_size > 1.0e-20:
-            delay = int(math.floor(raw_delay / bin_size + 0.5)) * bin_size
-        delays[label] = delay
-
-    min_delay = min(delays.values())
-    if abs(min_delay) > 1.0e-20:
-        delays = dict((label, delay - min_delay)
-                      for label, delay in delays.items())
-
-    unique_delays = sorted(set(['%.12g' % delay for delay in delays.values()]))
     max_delay = max(delays.values()) if delays else 0.0
     stats = {
         'mode': 'Traveling',
@@ -1843,7 +2154,35 @@ def _node_arrival_delays(boundary_faces, propagation_vector,
         report.add('SeismicInput', 'arrival_delay_max', stats['max_delay'])
         report.add('SeismicInput', 'arrival_delay_bins', stats['delay_bins'])
         report.add('SeismicInput', 'arrival_delay_bin_size', bin_size)
+        _add_face_arrival_delay_stats(boundary_faces, delays, report)
     return delays, stats
+
+
+def _add_wave_direction_warnings(wave_type, incident_direction,
+                                 propagation_direction, report=None):
+    wtype = str(wave_type or '').strip().upper()
+    if wtype not in ('P', 'S'):
+        return
+    dot = (
+        incident_direction[0] * propagation_direction[0] +
+        incident_direction[1] * propagation_direction[1] +
+        incident_direction[2] * propagation_direction[2])
+    abs_dot = abs(dot)
+    message = None
+    if wtype == 'P' and abs_dot < 0.5:
+        message = ('P-wave input usually has motion direction close to the '
+                   'propagation direction; check Incident Vector and '
+                   'Propagation Vector.')
+    if wtype == 'S' and abs_dot > 0.5:
+        message = ('S-wave input usually has motion direction close to '
+                   'perpendicular to the propagation direction; check '
+                   'Incident Vector and Propagation Vector.')
+    if report is not None:
+        report.add('SeismicInput', 'incident_propagation_dot', dot)
+    if message:
+        print('Warning: ' + message)
+        if report is not None:
+            report.add_message('WARNING', message)
 
 
 def _delete_prefixed_items(container, prefixes):
@@ -1908,7 +2247,18 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
     arrival_delays, delay_stats = _node_arrival_delays(
         boundary_faces, propagation_vector, apparent_wave_velocity,
         delay_bin_size, displacement, velocity, wave_input_mode,
-        report=report)
+        node_params=node_params, fallback_params=params,
+        vertical_axis=vertical_axis, report=report)
+    if delay_stats.get('mode', 'Uniform') == 'LayeredSite':
+        propagation_direction = _unit_vector(_vertical_axis_vector(
+            vertical_axis))
+    else:
+        propagation_direction = _unit_vector(propagation_vector)
+    if delay_stats.get('mode', 'Uniform') != 'Uniform':
+        _add_wave_direction_warnings(
+            wave_type, direction, propagation_direction, report=report)
+        export_seismic_arrival_info_csv(
+            instance, boundary_faces, arrival_delays, report=report)
     if report is not None:
         report.add('SeismicInput', 'direction_unit_vector', direction)
         report.add('SeismicInput', 'wave_type', wave_type)

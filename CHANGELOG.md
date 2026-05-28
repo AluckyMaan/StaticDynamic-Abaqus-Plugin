@@ -9,7 +9,12 @@
   locations can receive shifted amplitudes.
 - Added run-report fields for arrival mode, propagation vector, apparent
   velocity, delay range, and delay-bin count.
-- Kept site-response/free-field preprocessing as the next `0.4.0` module.
+- Added `SeismicArrivalInfo.csv`, per-face arrival-delay statistics, delay-bin
+  safety guard, and P/S incident-direction consistency warnings.
+- Added `LayeredSite` input mode with model-derived vertical `Vs` travel-time
+  delays and `SeismicSiteProfile.csv` audit export.
+- Kept equivalent-linear site response and free-field column coupling as the
+  next `0.4.0` module.
 
 ## 0.3.0 - 2026-05-26
 

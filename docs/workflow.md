@@ -22,9 +22,13 @@ The plugin currently follows this sequence:
 8. If seismic load is enabled:
    - read wave data from PEER (`.AT2/.VT2/.DT2`), CSV, or Excel files
    - convert PEER units into the selected model length unit
-   - choose uniform input or traveling-wave input
+   - choose uniform input, traveling-wave input, or layered-site input
    - for traveling-wave input, compute boundary-node arrival delays from the
      propagation vector and apparent velocity
+   - for layered-site input, compute boundary-node arrival delays from the
+     model-derived vertical `Vs` profile
+   - write `SeismicArrivalInfo.csv`, optional `SeismicSiteProfile.csv`, and
+     delay statistics for delayed-input runs
    - create the final analysis step
    - create equivalent boundary input amplitudes and nodal loads from
      `K_node * u_g(t) + C_node * v_g(t)`
