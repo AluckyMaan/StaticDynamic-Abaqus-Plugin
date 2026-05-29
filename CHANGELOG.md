@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 - 2026-05-28
+
+- Added earthquake-record preprocessing controls: `Wave Scale` and
+  `Baseline Correction = RemoveMean`.
+- Added `WavePreprocess` run-report audit fields for removed mean, scale,
+  and peak amplitudes before/after preprocessing.
+- Added `Site Profile CSV` import for `LayeredSite` arrival-delay input.
+- Supported imported profile columns such as `verticalCoordinate`,
+  `equivalentVs`, `cumulativeTravelTime`, and `sampleCount`; cumulative travel
+  time is generated automatically when omitted.
+- Updated the Abaqus/CAE dialog and plugin menu to `StaticDynamic v0.5.0`.
+
 ## 0.4.0 - 2026-05-28
 
 - Added traveling-wave seismic input mode with spatial arrival-time delay.

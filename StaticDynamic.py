@@ -20,7 +20,7 @@ except ImportError:
 # Abaqus also exports a name called sum; the plugin needs Python's numeric sum.
 sum = _builtins.sum
 
-__version__ = '0.4.0'
+__version__ = '0.5.0'
 MAX_TRAVELING_DELAY_BINS = 200
 
 
@@ -140,7 +140,9 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                           balance_tolerance, geo_type, wave_file,
                           model_length_unit, incident_vector,
                           wave_input_mode, propagation_vector,
-                          apparent_wave_velocity, delay_bin_size, report):
+                          apparent_wave_velocity, delay_bin_size,
+                          site_profile_file, wave_scale,
+                          baseline_correction, report):
     errors = []
     warnings = []
 
@@ -220,11 +222,21 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                     errors.append('Propagation Vector must be a non-zero x,y,z vector.')
         elif mode == 'LayeredSite':
             warnings.append('LayeredSite input uses model material Vs along the vertical axis; Apparent Velocity is ignored.')
+            if site_profile_file and not os.path.isfile(site_profile_file):
+                errors.append('Site Profile CSV file not found: %s' %
+                              site_profile_file)
         try:
             if float(delay_bin_size) < 0.0:
                 errors.append('Delay Bin Size cannot be negative.')
         except Exception:
             errors.append('Delay Bin Size must be numeric.')
+        try:
+            if abs(float(wave_scale)) <= 1.0e-20:
+                errors.append('Wave Scale cannot be zero.')
+        except Exception:
+            errors.append('Wave Scale must be numeric.')
+        if normalize_baseline_correction(baseline_correction) is None:
+            errors.append('Baseline Correction must be None or RemoveMean.')
 
     for message in warnings:
         print('Warning: ' + message)
@@ -247,6 +259,7 @@ def Main(functionOption='Seismic', Model_name='Model-1',
          modelLengthUnit='m',
          waveInputMode='Uniform', propagationVector='',
          apparentWaveVelocity=0.0, delayBinSize=0.0,
+         siteProfileFile='', waveScale=1.0, baselineCorrection='None',
          t_time=20.0, d_time=0.01, iterationsNum=20, saveNum=2,
          cpuNum=4, gpuNum=0, initialJobName='',
          NodeSet=True, NodeInfo=False,
@@ -273,6 +286,9 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         'propagationVector': propagationVector,
         'apparentWaveVelocity': apparentWaveVelocity,
         'delayBinSize': delayBinSize,
+        'siteProfileFile': siteProfileFile,
+        'waveScale': waveScale,
+        'baselineCorrection': baselineCorrection,
         't_time': t_time,
         'd_time': d_time,
         'iterationsNum': iterationsNum,
@@ -321,7 +337,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
             functionOption, geostaticFileType, geostaticFile, stepName,
             balanceTolerance, geoType, fileName, modelLengthUnit,
             theta_a, waveInputMode, propagationVector,
-            apparentWaveVelocity, delayBinSize, report)
+            apparentWaveVelocity, delayBinSize, siteProfileFile,
+            waveScale, baselineCorrection, report)
         if errors:
             report.set_status('FAILED')
             report.write()
@@ -453,7 +470,9 @@ def Main(functionOption='Seismic', Model_name='Model-1',
                 model, instance, boundary_faces, params, wave_data, wave111,
                 theta, verticalAxis, model_dimension, node_params,
                 waveInputMode, propagation, apparentWaveVelocity,
-                delayBinSize, report=report)
+                delayBinSize, siteProfileFile=siteProfileFile,
+                waveScale=waveScale, baselineCorrection=baselineCorrection,
+                report=report)
 
         if need_final_analysis:
             submit_job(model, initialJobName, cpuNum, gpuNum, autoSubmit,
@@ -574,6 +593,16 @@ def normalize_wave_input_mode(mode):
     if text in ('traveling', 'travelling', 'incident', 'oblique'):
         return 'Traveling'
     return 'Uniform'
+
+
+def normalize_baseline_correction(mode):
+    compact = str(mode or 'None').strip().replace('-', '').replace(
+        '_', '').replace(' ', '').lower()
+    if compact in ('', 'none', 'off', 'false', 'no'):
+        return 'None'
+    if compact in ('mean', 'removemean', 'demean', 'zeromean'):
+        return 'RemoveMean'
+    return None
 
 
 def normalize_geostatic_file_type(file_type):
@@ -1780,6 +1809,46 @@ def _differentiate_series(series):
     return result
 
 
+def _series_mean(series):
+    if not series:
+        return 0.0
+    return sum([float(item[1]) for item in series]) / float(len(series))
+
+
+def _series_peak_abs(series):
+    if not series:
+        return 0.0
+    return max([abs(float(item[1])) for item in series])
+
+
+def _preprocess_motion_series(motion, wave_scale=1.0,
+                              baseline_correction='None', report=None):
+    prepared = dict(motion)
+    scale = float(wave_scale)
+    correction = normalize_baseline_correction(baseline_correction)
+    if correction is None:
+        correction = 'None'
+    for kind in ('acceleration', 'velocity', 'displacement'):
+        series = prepared.get(kind)
+        if not series:
+            continue
+        mean_value = _series_mean(series) if correction == 'RemoveMean' else 0.0
+        peak_before = _series_peak_abs(series)
+        processed = []
+        for t, value in series:
+            processed.append((t, (float(value) - mean_value) * scale))
+        prepared[kind] = processed
+        peak_after = _series_peak_abs(processed)
+        if report is not None:
+            report.add('WavePreprocess', kind + '.baseline_correction',
+                       correction)
+            report.add('WavePreprocess', kind + '.mean_removed', mean_value)
+            report.add('WavePreprocess', kind + '.scale', scale)
+            report.add('WavePreprocess', kind + '.peak_before', peak_before)
+            report.add('WavePreprocess', kind + '.peak_after', peak_after)
+    return prepared
+
+
 def _prepare_motion_for_boundary_input(motion, report=None):
     prepared = dict(motion)
     if 'velocity' not in prepared:
@@ -1952,6 +2021,93 @@ def _equivalent_node_vs(node, node_params=None, fallback_params=None):
     return total_fraction / weighted_slowness
 
 
+def _profile_csv_column(row, names, fallback_index=None):
+    lowered = {}
+    for key, value in row.items():
+        lowered[str(key or '').strip().lstrip('\xef\xbb\xbf').lower()] = value
+    for name in names:
+        key = name.lower()
+        if key in lowered:
+            return lowered[key]
+    if fallback_index is not None:
+        values = list(row.values())
+        if fallback_index < len(values):
+            return values[fallback_index]
+    return None
+
+
+def read_site_profile_csv(path):
+    if not path:
+        return None
+    if not os.path.isfile(path):
+        raise ValueError('Site Profile CSV file not found: %s' % path)
+
+    rows = []
+    f = open(path, 'r')
+    try:
+        sample = f.readline()
+        f.seek(0)
+        has_header = any([char.isalpha() for char in sample])
+        if has_header:
+            reader = csv.DictReader(f)
+            for row in reader:
+                coord = _profile_csv_column(
+                    row, ('verticalCoordinate', 'coord', 'coordinate',
+                          'elevation', 'z', 'y', 'x'), 0)
+                vs = _profile_csv_column(
+                    row, ('equivalentVs', 'Vs', 'shearWaveVelocity'), 1)
+                travel = _profile_csv_column(
+                    row, ('cumulativeTravelTime', 'travelTime',
+                          'time'), None)
+                samples = _profile_csv_column(
+                    row, ('sampleCount', 'samples'), None)
+                try:
+                    item = {
+                        'coord': float(coord),
+                        'Vs': float(vs),
+                        'travelTime': float(travel) if travel not in (
+                            None, '') else None,
+                        'samples': int(float(samples)) if samples not in (
+                            None, '') else 0,
+                    }
+                except Exception:
+                    continue
+                rows.append(item)
+        else:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) < 2:
+                    continue
+                try:
+                    rows.append({
+                        'coord': float(row[0]),
+                        'Vs': float(row[1]),
+                        'travelTime': float(row[2]) if len(row) > 2 and
+                        row[2] != '' else None,
+                        'samples': int(float(row[3])) if len(row) > 3 and
+                        row[3] != '' else 0,
+                    })
+                except Exception:
+                    continue
+    finally:
+        f.close()
+
+    rows = [row for row in rows if row['Vs'] > 0.0]
+    if not rows:
+        raise ValueError('Site Profile CSV requires positive coordinate/Vs rows.')
+    rows.sort(key=lambda item: item['coord'])
+    needs_travel_time = any([row.get('travelTime') is None for row in rows])
+    if needs_travel_time:
+        rows[0]['travelTime'] = 0.0
+        for index in range(1, len(rows)):
+            prev = rows[index - 1]
+            row = rows[index]
+            dz = abs(row['coord'] - prev['coord'])
+            row['travelTime'] = prev['travelTime'] + dz * 0.5 * (
+                1.0 / prev['Vs'] + 1.0 / row['Vs'])
+    return rows
+
+
 def _layered_site_profile_from_nodes(nodes, vertical_axis, node_params=None,
                                      fallback_params=None):
     axis = _axis_index(vertical_axis)
@@ -2022,7 +2178,7 @@ def _profile_time_at(coord, profile):
 def _node_layered_site_arrival_delays(boundary_faces, vertical_axis,
                                       node_params, fallback_params,
                                       delay_bin_size, displacement, velocity,
-                                      report=None):
+                                      site_profile_file='', report=None):
     nodes = _unique_nodes_from_faces(boundary_faces)
     if not nodes:
         return {}, {
@@ -2033,8 +2189,13 @@ def _node_layered_site_arrival_delays(boundary_faces, vertical_axis,
             'delay_bin_size': 0.0,
         }
 
-    profile = _layered_site_profile_from_nodes(
-        nodes, vertical_axis, node_params, fallback_params)
+    profile_source = 'model_material_vs'
+    if site_profile_file:
+        profile = read_site_profile_csv(site_profile_file)
+        profile_source = site_profile_file
+    else:
+        profile = _layered_site_profile_from_nodes(
+            nodes, vertical_axis, node_params, fallback_params)
     axis = _axis_index(vertical_axis)
     raw_delays = dict(
         (node.label, _profile_time_at(_node_coords(node)[axis], profile))
@@ -2060,7 +2221,7 @@ def _node_layered_site_arrival_delays(boundary_faces, vertical_axis,
     if report is not None:
         report.add('SeismicInput', 'arrival_mode', 'LayeredSite')
         report.add('SeismicInput', 'site_profile_source',
-                   'model_material_vs')
+                   profile_source)
         report.add('SeismicInput', 'site_vertical_axis',
                    str(vertical_axis).upper())
         report.add('SeismicInput', 'site_profile_points',
@@ -2085,12 +2246,14 @@ def _node_arrival_delays(boundary_faces, propagation_vector,
                          apparent_velocity, delay_bin_size,
                          displacement, velocity, wave_input_mode,
                          node_params=None, fallback_params=None,
-                         vertical_axis='Y', report=None):
+                         vertical_axis='Y', site_profile_file='',
+                         report=None):
     mode = normalize_wave_input_mode(wave_input_mode)
     if mode == 'LayeredSite':
         return _node_layered_site_arrival_delays(
             boundary_faces, vertical_axis, node_params, fallback_params,
-            delay_bin_size, displacement, velocity, report=report)
+            delay_bin_size, displacement, velocity,
+            site_profile_file=site_profile_file, report=report)
     if mode != 'Traveling':
         return {}, {
             'mode': 'Uniform',
@@ -2230,7 +2393,9 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
                        wave_type, theta, vertical_axis, model_dimension='3D',
                        node_params=None, wave_input_mode='Uniform',
                        propagation_vector=None, apparent_wave_velocity=0.0,
-                       delay_bin_size=0.0, report=None):
+                       delay_bin_size=0.0, siteProfileFile='',
+                       waveScale=1.0, baselineCorrection='None',
+                       report=None):
     step_name = 'Step-dynamic'
     if step_name not in model.steps.keys():
         print('Warning: dynamic step not found; seismic load skipped.')
@@ -2238,7 +2403,9 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
             report.add_message('WARNING', 'Dynamic step not found; seismic load skipped.')
         return
 
-    motion = _prepare_motion_for_boundary_input(wave_data, report=report)
+    motion = _preprocess_motion_series(
+        wave_data, waveScale, baselineCorrection, report=report)
+    motion = _prepare_motion_for_boundary_input(motion, report=report)
     displacement = motion['displacement']
     velocity = motion['velocity']
     direction = _unit_vector(theta)
@@ -2248,7 +2415,8 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
         boundary_faces, propagation_vector, apparent_wave_velocity,
         delay_bin_size, displacement, velocity, wave_input_mode,
         node_params=node_params, fallback_params=params,
-        vertical_axis=vertical_axis, report=report)
+        vertical_axis=vertical_axis, site_profile_file=siteProfileFile,
+        report=report)
     if delay_stats.get('mode', 'Uniform') == 'LayeredSite':
         propagation_direction = _unit_vector(_vertical_axis_vector(
             vertical_axis))
