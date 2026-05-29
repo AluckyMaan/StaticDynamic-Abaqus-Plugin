@@ -17,6 +17,7 @@ ID_SEISMIC_CHK = _ID_BASE + 33
 ID_AUTO_SUBMIT_CHK = _ID_BASE + 34
 ID_GEOSTATIC_FILE_BROWSE = _ID_BASE + 35
 ID_GEOSTATIC_SOURCE = _ID_BASE + 36
+ID_SITE_PROFILE_BROWSE = _ID_BASE + 37
 
 GEOSTATIC_ODB_PATTERNS = 'ODB Files (*.odb);;All Files (*)'
 GEOSTATIC_CSV_PATTERNS = 'CSV Files (*.csv);;All Files (*)'
@@ -89,6 +90,9 @@ class StaticDynamicForm(AFXForm):
         self.propagationVectorKw = AFXStringKeyword(self.cmd, 'propagationVector', True, '')
         self.apparentWaveVelocityKw = AFXFloatKeyword(self.cmd, 'apparentWaveVelocity', True, 0.0)
         self.delayBinSizeKw = AFXFloatKeyword(self.cmd, 'delayBinSize', True, 0.0)
+        self.siteProfileFileKw = AFXStringKeyword(self.cmd, 'siteProfileFile', True, '')
+        self.waveScaleKw = AFXFloatKeyword(self.cmd, 'waveScale', True, 1.0)
+        self.baselineCorrectionKw = AFXStringKeyword(self.cmd, 'baselineCorrection', True, 'None')
         self.t_timeKw = AFXFloatKeyword(self.cmd, 't_time', True, 20.0)
         self.d_timeKw = AFXFloatKeyword(self.cmd, 'd_time', True, 0.01)
         self.iterationsNumKw = AFXIntKeyword(self.cmd, 'iterationsNum', True, 20)
@@ -143,6 +147,14 @@ class StaticDynamicForm(AFXForm):
                 return False
         if seismic and self.delayBinSizeKw.getValue() < 0.0:
             _err('Delay Bin Size cannot be negative.')
+            return False
+        if seismic and abs(self.waveScaleKw.getValue()) <= 1.0e-20:
+            _err('Wave Scale cannot be zero.')
+            return False
+        site_profile = self.siteProfileFileKw.getValue()
+        if (seismic and self.waveInputModeKw.getValue() == 'LayeredSite' and
+                site_profile and not os.path.isfile(site_profile)):
+            _err('Site Profile CSV file not found.')
             return False
         geostatic_file = self.geostaticFileKw.getValue()
         if spring and (not geostatic_file or not os.path.isfile(geostatic_file)):
@@ -284,6 +296,29 @@ class StaticDynamicDialog(AFXDataDialog):
         self.fileBtn = FXButton(row, 'Browse...', None, self,
                                 ID_FILE_BROWSE, BUTTON_NORMAL | LAYOUT_CENTER_Y)
 
+        row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
+        FXLabel(row, 'Site Profile CSV:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
+        self.siteProfileTxt = AFXTextField(
+            row, 20, '', form.siteProfileFileKw, 0,
+            AFXTEXTFIELD_STRING | LAYOUT_FILL_X)
+        self.siteProfileBtn = FXButton(row, 'Browse...', None, self,
+                                       ID_SITE_PROFILE_BROWSE,
+                                       BUTTON_NORMAL | LAYOUT_CENTER_Y)
+
+        row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
+        FXLabel(row, 'Wave Scale:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
+        self.waveScaleSpin = AFXFloatSpinner(row, 10, '', form.waveScaleKw, 0)
+        self.waveScaleSpin.setRange(-1.0e12, 1.0e12)
+        self.waveScaleSpin.setValue(1.0)
+
+        row = FXHorizontalFrame(tab1, LAYOUT_FILL_X)
+        FXLabel(row, 'Baseline Fix:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 115, 0)
+        self.baselineCorrectionCmb = AFXComboBox(
+            row, 10, 2, '', form.baselineCorrectionKw, 0, LAYOUT_FILL_X)
+        self.baselineCorrectionCmb.appendItem('None')
+        self.baselineCorrectionCmb.appendItem('RemoveMean')
+        self.baselineCorrectionCmb.setCurrentItem(0)
+
         tab2 = FXVerticalFrame(content, FRAME_RAISED | LAYOUT_FILL_X | LAYOUT_FILL_Y)
         FXLabel(tab2, 'Analysis Parameters', None)
 
@@ -401,6 +436,7 @@ class StaticDynamicDialog(AFXDataDialog):
 
         FXMAPFUNC(self, SEL_COMMAND, ID_FILE_BROWSE, self.onBrowseFile)
         FXMAPFUNC(self, SEL_COMMAND, ID_GEOSTATIC_FILE_BROWSE, self.onBrowseGeostaticFile)
+        FXMAPFUNC(self, SEL_COMMAND, ID_SITE_PROFILE_BROWSE, self.onBrowseSiteProfile)
         FXMAPFUNC(self, SEL_COMMAND, ID_GEOSTATIC_SOURCE, self.onGeostaticSource)
         FXMAPFUNC(self, SEL_COMMAND, ID_NODE_SET_CHK, self.onNodeSetChk)
         FXMAPFUNC(self, SEL_COMMAND, ID_NODE_INFO_CHK, self.onNodeInfoChk)
@@ -416,6 +452,12 @@ class StaticDynamicDialog(AFXDataDialog):
             self.geostaticFileTxt, fileKeyword=form.geostaticFileKw,
             title='Select Geostatic File',
             patterns=GEOSTATIC_ODB_PATTERNS, dbKey='geostaticFile')
+        self.siteProfileFileHandler = StaticDynamicDBFileHandler(
+            self, self.siteProfileTxt, self.siteProfileBtn,
+            self.siteProfileTxt, fileKeyword=form.siteProfileFileKw,
+            title='Select Site Profile CSV',
+            patterns='CSV Files (*.csv);;All Files (*)',
+            dbKey='siteProfileFile')
         self._sync_geostatic_file_patterns()
         FXHorizontalSeparator(self, SEPARATOR_GROOVE | LAYOUT_FILL_X)
         self._update_option_states()
@@ -425,6 +467,9 @@ class StaticDynamicDialog(AFXDataDialog):
 
     def onBrowseGeostaticFile(self, sender, sel, ptr, data=None):
         self.geostaticFileHandler.activate()
+
+    def onBrowseSiteProfile(self, sender, sel, ptr, data=None):
+        self.siteProfileFileHandler.activate()
 
     def onGeostaticSource(self, sender, sel, ptr, data=None):
         self.owner.geostaticFileTypeKw.setValue(
@@ -524,6 +569,10 @@ class StaticDynamicDialog(AFXDataDialog):
             self.propagationTxt,
             self.apparentVelocitySpin,
             self.delayBinSpin,
+            self.siteProfileTxt,
+            self.siteProfileBtn,
+            self.waveScaleSpin,
+            self.baselineCorrectionCmb,
             self.modelLengthUnitCmb,
             self.tTimeSpin,
             self.dTimeSpin,

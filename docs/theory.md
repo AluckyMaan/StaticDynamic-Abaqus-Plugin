@@ -131,6 +131,28 @@ equivalent `Vs`, cumulative travel time, and sample count. The node-level
 delays are still exported through `SeismicArrivalInfo.csv`, so the applied
 time shifts can be audited before running the final dynamic job.
 
+Version `0.5.0` can also import a site profile from CSV. The required fields
+are vertical coordinate and equivalent `Vs`; cumulative travel time is optional.
+When the travel-time column is omitted, the plugin sorts the profile by
+coordinate and integrates slowness between adjacent rows. This allows a profile
+from an external site-characterization or site-response workflow to drive the
+same `LayeredSite` delay grouping.
+
 This is still a kinematic arrival-time correction. It does not replace a
 free-field column calculation, deconvolution from surface records to bedrock, or
 a full oblique-wave scattering solution for layered media.
+
+## Motion Preprocessing Audit
+
+Version `0.5.0` adds conservative preprocessing before the equivalent-load
+calculation:
+
+- `Wave Scale` multiplies the loaded acceleration, velocity, and displacement
+  records after unit conversion.
+- `Baseline Correction = RemoveMean` subtracts the mean of each loaded series
+  before scaling.
+
+The run report records the removed mean, scale factor, and peak values before
+and after preprocessing. Missing velocity or displacement records are then
+generated from the preprocessed records by the same trapezoidal
+integration/differentiation workflow used in earlier releases.
