@@ -2,9 +2,11 @@
 
 [English README](README.md)
 
-当前发布版本：`0.5.0`
+当前发布版本：`0.6.0`
 
-最新稳定版本：`0.5.0`
+最新稳定版本：`0.6.0`
+
+[v0.6.0 发布说明](docs/releases/v0.6.0.md)
 
 StaticDynamic 是一个 Abaqus/CAE Python 插件，用于土体静动力转换和粘弹性人工边界施加。当前版本重点支持复杂土-结构模型的外部地应力平衡结果导入，再由插件完成边界节点识别、反力读取、粘弹性边界施加和静力反力回填。
 
@@ -59,6 +61,7 @@ Abaqus/CAE 对话框将模型参数、地应力反力来源、动力分析参数
 - ODB 输入时检查最后一帧位移场 `U`，默认容许值为 `1.0e-4`。
 - 导出 `BoundaryInfo.csv`，用于外部地应力反力表生成和核对。
 - 支持 PEER `.AT2/.VT2/.DT2` 地震动文件读取和单位转换。
+- 支持按入射角和方位角生成任意角度斜入射行波到时差。
 - 根据边界弹簧阻尼参数生成等效地震输入节点荷载。
 
 ## 适用思路
@@ -73,7 +76,7 @@ Abaqus/CAE 对话框将模型参数、地应力反力来源、动力分析参数
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.5.0`。
+重启 Abaqus/CAE 后，插件菜单中应出现 `StaticDynamic v0.6.0`。
 
 ## 基本流程
 
@@ -174,6 +177,8 @@ F(t) = K_node * u_g(t) + C_node * v_g(t)
 - `Input Mode = LayeredSite`：根据模型材料的 `Vs` 和竖向坐标估算一维场地柱到时差，并按延迟分组施加时程。
 - `Incident Vector`：运动或等效荷载方向。
 - `Propagation Vector`：波传播方向，用于计算到时差。
+- `Incident Angle`：入射角，单位为度，从当前 `Vertical Axis` 竖向轴量起；当 `Propagation Vector` 为空时使用。
+- `Azimuth`：方位角，单位为度，在水平面内量起。若 `Vertical Axis = Y`，`0` 指向全局 X，`90` 指向全局 Z。
 - `Apparent Velocity`：表观传播速度，单位为模型长度单位/秒。
 - `Delay Bin Size`：到时差分组间隔；填 `0` 时自动使用波形时间步长。
 
@@ -184,7 +189,8 @@ tau_i = ((x_i - x_ref) dot n) / c_app
 F_i(t) = K_i * u_g(t - tau_i) + C_i * v_g(t - tau_i)
 ```
 
-其中 `n` 为归一化后的 `Propagation Vector`，`c_app` 为 `Apparent
+其中 `n` 为归一化后的 `Propagation Vector`；若 `Propagation Vector`
+为空，则由 `Incident Angle` 和 `Azimuth` 自动生成。`c_app` 为 `Apparent
 Velocity`，`x_ref` 为最先到达的边界投影位置。这个功能是空间到时差修正，还不是完整自由场散射求解。
 
 行波模式会额外导出 `SeismicArrivalInfo.csv`，记录每个边界节点的到时差。运行报告会记录整体和各边界面的延迟范围、延迟分组数量。为了避免 Abaqus 幅值和荷载对象数量失控，当前延迟分组安全上限为 200；如果触发该限制，应增大 `Delay Bin Size`。插件还会在 `P/S` 波类型与入射方向、传播方向明显不一致时给出 warning。
@@ -199,6 +205,10 @@ Velocity`，`x_ref` 为最先到达的边界投影位置。这个功能是空间
 - `Baseline Correction = RemoveMean`：在等效荷载生成前扣除时程均值。
 - `Site Profile CSV`：在 `LayeredSite` 模式中导入外部 `Vs` 剖面；若未提供累计走时，插件会按坐标和 `Vs` 自动积分。
 - 运行报告会记录调幅、扣除均值以及预处理前后的峰值。
+
+`v0.6.0` 已加入任意角度斜入射输入：在 `Input Mode = Traveling`
+时，可直接填写 `Incident Angle` 和 `Azimuth` 生成传播方向；如果同时填写
+`Propagation Vector`，则以显式向量为准，便于复现旧版工程或输入特殊方向。
 
 后续版本将继续优化等效线性场地反应、自由场柱耦合，以及水平/竖向多分量输入一致性检查。
 

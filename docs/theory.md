@@ -98,6 +98,10 @@ The motion direction and propagation direction are treated separately:
 - `Incident Vector` defines the global force or motion component.
 - `Propagation Vector` defines the direction in which the record arrives along
   the artificial boundary.
+- `Incident Angle` and `Azimuth` can generate the propagation vector for
+  arbitrary oblique incidence when `Propagation Vector` is blank. The angle is
+  measured from the selected vertical axis, and the azimuth is measured in the
+  horizontal plane.
 
 For each boundary node, the arrival delay is computed from the projection along
 the normalized propagation vector:

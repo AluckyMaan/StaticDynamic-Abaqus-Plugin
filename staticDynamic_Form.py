@@ -88,6 +88,8 @@ class StaticDynamicForm(AFXForm):
         self.theta_aKw = AFXStringKeyword(self.cmd, 'theta_a', True, '0,1,0')
         self.waveInputModeKw = AFXStringKeyword(self.cmd, 'waveInputMode', True, 'Uniform')
         self.propagationVectorKw = AFXStringKeyword(self.cmd, 'propagationVector', True, '')
+        self.incidentAngleKw = AFXFloatKeyword(self.cmd, 'incidentAngle', True, 0.0)
+        self.azimuthAngleKw = AFXFloatKeyword(self.cmd, 'azimuthAngle', True, 0.0)
         self.apparentWaveVelocityKw = AFXFloatKeyword(self.cmd, 'apparentWaveVelocity', True, 0.0)
         self.delayBinSizeKw = AFXFloatKeyword(self.cmd, 'delayBinSize', True, 0.0)
         self.siteProfileFileKw = AFXStringKeyword(self.cmd, 'siteProfileFile', True, '')
@@ -374,6 +376,18 @@ class StaticDynamicDialog(AFXDataDialog):
             AFXTEXTFIELD_STRING | LAYOUT_FILL_X)
 
         row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
+        FXLabel(row, 'Incident Angle:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
+        self.incidentAngleSpin = AFXFloatSpinner(
+            row, 10, '', form.incidentAngleKw, 0)
+        self.incidentAngleSpin.setRange(-360.0, 360.0)
+        self.incidentAngleSpin.setValue(0.0)
+        FXLabel(row, 'Azimuth:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y)
+        self.azimuthAngleSpin = AFXFloatSpinner(
+            row, 10, '', form.azimuthAngleKw, 0)
+        self.azimuthAngleSpin.setRange(-360.0, 360.0)
+        self.azimuthAngleSpin.setValue(0.0)
+
+        row = FXHorizontalFrame(tab2, LAYOUT_FILL_X)
         FXLabel(row, 'Apparent Velocity:', None, JUSTIFY_LEFT | LAYOUT_CENTER_Y, 0, 0, 130, 0)
         self.apparentVelocitySpin = AFXFloatSpinner(
             row, 10, '', form.apparentWaveVelocityKw, 0)
@@ -567,6 +581,8 @@ class StaticDynamicDialog(AFXDataDialog):
             self.thetaTxt,
             self.waveInputModeCmb,
             self.propagationTxt,
+            self.incidentAngleSpin,
+            self.azimuthAngleSpin,
             self.apparentVelocitySpin,
             self.delayBinSpin,
             self.siteProfileTxt,
