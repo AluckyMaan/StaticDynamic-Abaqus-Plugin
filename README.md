@@ -6,7 +6,8 @@ Current release version: `0.6.0`
 
 Latest stable release: `0.6.0`
 
-[Release notes: v0.6.0](docs/releases/v0.6.0.md)
+[Release notes: v0.6.0](docs/releases/v0.6.0.md) ·
+[GitHub release](https://github.com/AluckyMaan/StaticDynamic-Abaqus-Plugin/releases/tag/v0.6.0)
 
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
@@ -39,6 +40,31 @@ face or edge, soil material contribution, and tributary area or length.
 <p align="center">
   <img src="docs/assets/v0.4.0-static-dynamic-workflow.svg" alt="StaticDynamic v0.4.0 workflow: boundary detection, geostatic balance, PEER wave input, traveling-wave delay, and equivalent loads" width="900">
 </p>
+
+### v0.6.0 Oblique-Incidence Validation
+
+Version `0.6.0` was validated in Abaqus/CAE with a five-layer
+`30 m x 20 m x 20 m` soil model, 1 m C3D8R mesh, geostatic reaction extraction,
+viscous-spring boundary conversion, and a 32-degree oblique traveling-wave
+earthquake input. The dynamic ODB contains displacement `U`, velocity `V`, and
+acceleration `A` field outputs.
+
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/assets/v0.6.0-30x20x20-5layer-mesh.png" alt="v0.6.0 five-layer 1 m mesh validation model" width="100%"><br>
+      <sub>1 m five-layer mesh.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/v0.6.0-30x20x20-springdashpot-interactions.png" alt="v0.6.0 generated viscous-spring boundary features" width="100%"><br>
+      <sub>Viscous-spring boundary features.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/v0.6.0-30x20x20-oblique-loads.png" alt="v0.6.0 generated oblique seismic equivalent loads" width="100%"><br>
+      <sub>32-degree oblique seismic loads.</sub>
+    </td>
+  </tr>
+</table>
 
 ### GUI Workflow
 
