@@ -5,6 +5,7 @@ import csv
 import datetime
 import math
 import os
+import sys
 
 from abaqus import *
 from abaqusConstants import *
@@ -16,12 +17,28 @@ try:
     import __builtin__ as _builtins
 except ImportError:
     import builtins as _builtins
+try:
+    _string_types = (basestring,)
+except NameError:
+    _string_types = (str,)
 
 # Abaqus also exports a name called sum; the plugin needs Python's numeric sum.
 sum = _builtins.sum
 
-__version__ = '0.6.1'
+__version__ = '0.6.2'
 MAX_TRAVELING_DELAY_BINS = 200
+
+
+def _open_csv_write(path):
+    if sys.version_info[0] >= 3:
+        return open(path, 'w', newline='')
+    return open(path, 'wb')
+
+
+def _open_csv_read(path):
+    if sys.version_info[0] >= 3:
+        return open(path, 'r', newline='')
+    return open(path, 'rb')
 
 
 class StaticDynamicRunReport(object):
@@ -57,7 +74,7 @@ class StaticDynamicRunReport(object):
             ('Run', 'status', self.status, ''),
         ] + self.rows
 
-        f = open(csv_path, 'wb')
+        f = _open_csv_write(csv_path)
         try:
             writer = csv.writer(f)
             writer.writerow(['section', 'name', 'value', 'note'])
@@ -727,7 +744,37 @@ def _section_material_name(model, section_name):
     if section_name not in model.sections.keys():
         return None
     section = model.sections[section_name]
-    return getattr(section, 'material', None)
+    material = getattr(section, 'material', None)
+    if material:
+        return material
+
+    materials = getattr(section, 'materials', None)
+    if materials:
+        names = []
+        material_keys = model.materials.keys()
+        for item in materials:
+            candidates = []
+            if isinstance(item, (list, tuple)):
+                candidates.extend(list(item))
+            else:
+                candidates.append(item)
+            attr_candidates = []
+            for candidate in list(candidates):
+                for attr in ('material', 'materialName', 'name'):
+                    value = getattr(candidate, attr, None)
+                    if value:
+                        attr_candidates.append(value)
+            candidates.extend(attr_candidates)
+            for candidate in candidates:
+                if isinstance(candidate, _string_types) and candidate in material_keys:
+                    if candidate not in names:
+                        names.append(candidate)
+        if names:
+            print('Warning: section "%s" uses multiple materials; '
+                  'using "%s" for boundary parameter grouping.' %
+                  (section_name, names[0]))
+            return names[0]
+    return None
 
 
 def _resolve_region(region, part=None):
@@ -797,12 +844,7 @@ def _cluster_layer_points(layer_points):
     ordered = sorted(layer_points, key=lambda item: item[0])
     span = ordered[-1][0] - ordered[0][0]
     tol = max(1.0e-9, abs(span) * 1.0e-8)
-    clusters = []
-    for value, material_name in ordered:
-        if not clusters or abs(value - clusters[-1][-1][0]) > tol:
-            clusters.append([(value, material_name)])
-        else:
-            clusters[-1].append((value, material_name))
+    clusters = _cluster_values(ordered, tol, key=lambda item: item[0])
 
     result = []
     for cluster in clusters:
@@ -812,6 +854,17 @@ def _cluster_layer_points(layer_points):
             counts[material_name] = counts.get(material_name, 0) + 1
         result.append((center, _dominant_material(counts)))
     return result
+
+
+def _cluster_values(values, tol, key=None):
+    key = key or (lambda item: item)
+    clusters = []
+    for value in values:
+        if not clusters or abs(key(value) - key(clusters[-1][-1])) > tol:
+            clusters.append([value])
+        else:
+            clusters[-1].append(value)
+    return clusters
 
 
 def _material_from_layer_centers(value, layer_centers):
@@ -1051,13 +1104,7 @@ def _axis_tributary_widths(values):
     span = raw_values[-1] - raw_values[0]
     tol = max(1.0e-9, abs(span) * 1.0e-8)
 
-    clusters = []
-    for value in raw_values:
-        if not clusters or abs(value - clusters[-1][-1]) > tol:
-            clusters.append([value])
-        else:
-            clusters[-1].append(value)
-
+    clusters = _cluster_values(raw_values, tol)
     unique = [sum(cluster) / float(len(cluster)) for cluster in clusters]
     if len(unique) == 1:
         return dict((value, 1.0) for value in raw_values)
@@ -1168,9 +1215,16 @@ def get_boundary_node_faces(model, instance, soil_set_name, vertical_axis,
     vertical_idx = _axis_index(vertical_axis)
     axis_names = ['X', 'Y', 'Z']
 
-    coords = [_node_coords(node) for node in source_nodes]
-    mins = [min([coord[i] for coord in coords]) for i in range(3)]
-    maxs = [max([coord[i] for coord in coords]) for i in range(3)]
+    coords_by_label = dict((node.label, _node_coords(node))
+                           for node in source_nodes)
+    mins = [None, None, None]
+    maxs = [None, None, None]
+    for coord in coords_by_label.values():
+        for i in range(3):
+            if mins[i] is None or coord[i] < mins[i]:
+                mins[i] = coord[i]
+            if maxs[i] is None or coord[i] > maxs[i]:
+                maxs[i] = coord[i]
     spans = [maxs[i] - mins[i] for i in range(3)]
     max_span = max(spans)
     tol = max(1.0e-6, max_span * 1.0e-8)
@@ -1209,7 +1263,7 @@ def get_boundary_node_faces(model, instance, soil_set_name, vertical_axis,
     for name, idx, value in face_defs:
         face_nodes = [
             node for node in source_nodes
-            if abs(_node_coords(node)[idx] - value) <= tol
+            if abs(coords_by_label[node.label][idx] - value) <= tol
         ]
         faces[name] = face_nodes
         print('Boundary face %-6s: %d nodes' % (name, len(face_nodes)))
@@ -1251,12 +1305,14 @@ def create_boundary_node_set(model, instance, nodes, export_info=False,
 
     if export_info:
         path = os.path.join(os.path.dirname(__file__), 'NodeInfo.csv')
-        f = open(path, 'wb')
-        writer = csv.writer(f)
-        writer.writerow(['Label', 'X', 'Y', 'Z'])
-        for node in nodes:
-            writer.writerow([node.label] + list(node.coordinates))
-        f.close()
+        f = _open_csv_write(path)
+        try:
+            writer = csv.writer(f)
+            writer.writerow(['Label', 'X', 'Y', 'Z'])
+            for node in nodes:
+                writer.writerow([node.label] + list(node.coordinates))
+        finally:
+            f.close()
         print('Node info exported to: %s' % path)
         if report is not None:
             report.add('Output', 'NodeInfo.csv', path)
@@ -1280,7 +1336,7 @@ def export_boundary_info_csv(model, instance, boundary_faces, node_params,
                                  (params.get('material', 'Material'), fraction))
             material_by_node[(face_name, node.label)] = '|'.join(materials)
 
-    f = open(path, 'wb')
+    f = _open_csv_write(path)
     try:
         writer = csv.writer(f)
         writer.writerow([
@@ -1312,7 +1368,7 @@ def export_seismic_arrival_info_csv(boundary_faces, arrival_delays,
     path = os.path.join(os.path.dirname(__file__),
                         'SeismicArrivalInfo.csv')
     rows = 0
-    f = open(path, 'wb')
+    f = _open_csv_write(path)
     try:
         writer = csv.writer(f)
         writer.writerow([
@@ -1340,7 +1396,7 @@ def export_seismic_site_profile_csv(profile, report=None):
     path = os.path.join(os.path.dirname(__file__),
                         'SeismicSiteProfile.csv')
     rows = 0
-    f = open(path, 'wb')
+    f = _open_csv_write(path)
     try:
         writer = csv.writer(f)
         writer.writerow([
@@ -1463,7 +1519,7 @@ def read_boundary_reactions_from_csv(csv_path, nodes, report=None):
     target_labels = set([node.label for node in nodes])
     reactions = {}
     header_map = None
-    f = open(csv_path, 'rb')
+    f = _open_csv_read(csv_path)
     try:
         reader = csv.reader(f)
         for row in reader:
@@ -2098,7 +2154,7 @@ def read_site_profile_csv(path):
         raise ValueError('Site Profile CSV file not found: %s' % path)
 
     rows = []
-    f = open(path, 'r')
+    f = _open_csv_read(path)
     try:
         sample = f.readline()
         f.seek(0)

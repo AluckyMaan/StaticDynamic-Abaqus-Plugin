@@ -4,6 +4,7 @@ from __future__ import print_function
 import csv
 import os
 import re
+import sys
 
 try:
     import xlrd
@@ -26,6 +27,12 @@ PEER_EXTENSIONS = {
     '.vt2': 'velocity',
     '.dt2': 'displacement',
 }
+
+
+def _open_csv_read(path):
+    if sys.version_info[0] >= 3:
+        return open(path, 'r', newline='')
+    return open(path, 'rb')
 
 
 class StaticDynamicDB(object):
@@ -138,7 +145,7 @@ def read_csv_file(path):
     if not os.path.isfile(path):
         raise StaticDynamicFileNotFoundError(path)
     rows = []
-    f = open(path, 'rb')
+    f = _open_csv_read(path)
     try:
         for row in csv.reader(f):
             rows.append(row)
@@ -149,7 +156,7 @@ def read_csv_file(path):
 
 def read_csv_data(filepath):
     data = []
-    f = open(filepath, 'r')
+    f = _open_csv_read(filepath)
     try:
         reader = csv.reader(f)
         for row in reader:
