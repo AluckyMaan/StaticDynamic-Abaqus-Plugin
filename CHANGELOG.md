@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.2 - 2026-06-07
+
+- Added Python 2/3-aware CSV read/write helpers so report and audit CSV files
+  use text `newline=''` mode on Python 3 while preserving Abaqus Python 2
+  compatibility.
+- Covered `NodeInfo.csv`, boundary audit CSVs, seismic arrival/profile CSVs,
+  geostatic reaction CSV input, and run-report CSV output with the shared CSV
+  helpers.
+- Reduced repeated boundary-node coordinate access by caching node coordinates
+  in `get_boundary_node_faces()` and computing axis min/max values in one pass.
+- Extracted shared coordinate-clustering logic for layer-center detection and
+  tributary-width calculation.
+- Hardened section material resolution for sections that expose a `materials`
+  collection instead of a single `material` attribute.
+- Reconnected the dialog `processUpdates()` path to the lightweight
+  `StaticDynamicDB` cache and option-state refresh.
+- Updated the Abaqus/CAE dialog and plugin menu to `StaticDynamic v0.6.2`.
+
 ## 0.6.1 - 2026-06-07
 
 - Merged the `0.5.1` code-review bug fixes into the `0.6.x` oblique-incidence

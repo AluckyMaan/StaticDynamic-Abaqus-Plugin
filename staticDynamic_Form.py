@@ -609,4 +609,6 @@ class StaticDynamicDialog(AFXDataDialog):
             self.owner.autoSubmitKw.setValue(False)
 
     def processUpdates(self):
-        pass
+        self.db.processUpdates()
+        self._sync_geostatic_file_patterns()
+        self._update_option_states()
