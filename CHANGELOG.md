@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.1 - 2026-06-07
+
+- Merged the `0.5.1` code-review bug fixes into the `0.6.x` oblique-incidence
+  branch without regressing angle-based propagation-vector generation.
+- Fixed traveling-wave mode normalization for hyphen/space/underscore variants
+  such as `traveling wave` and `traveling-wave`.
+- Sorted arrival-delay bins numerically instead of lexicographically in global
+  and per-face delay statistics.
+- Hardened site-profile CSV header detection so scientific notation values are
+  not mistaken for headers.
+- Simplified seismic-arrival CSV export and reused the shared vector-magnitude
+  helper in unit-vector normalization.
+- Updated the Abaqus/CAE dialog and plugin menu to `StaticDynamic v0.6.1`.
+
 ## 0.6.0 - 2026-06-03
 
 - Added oblique incident-wave controls with arbitrary `Incident Angle` and

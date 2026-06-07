@@ -21,12 +21,12 @@ try:
 except Exception:
     icon = None
 toolset.registerGuiMenuButton(
-    buttonText='StaticDynamic v0.6.0',
+    buttonText='StaticDynamic v0.6.1',
     object=StaticDynamicForm(toolset),
     messageId=AFXMode.ID_ACTIVATE,
     icon=icon,
     kernelInitString='import os, sys; p=r"%s"; sys.path.insert(0, p) if p not in sys.path else None; import StaticDynamic' % plugin_dir,
     applicableModules=ALL,
-    version='0.6.0',
+    version='0.6.1',
     author='YANG',
     description='Static-dynamic analysis with visual viscous-spring boundary')
