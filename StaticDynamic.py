@@ -20,7 +20,7 @@ except ImportError:
 # Abaqus also exports a name called sum; the plugin needs Python's numeric sum.
 sum = _builtins.sum
 
-__version__ = '0.5.0'
+__version__ = '0.6.0'
 MAX_TRAVELING_DELAY_BINS = 200
 
 
@@ -140,6 +140,7 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                           balance_tolerance, geo_type, wave_file,
                           model_length_unit, incident_vector,
                           wave_input_mode, propagation_vector,
+                          incident_angle, azimuth_angle,
                           apparent_wave_velocity, delay_bin_size,
                           site_profile_file, wave_scale,
                           baseline_correction, report):
@@ -216,6 +217,14 @@ def _validate_main_inputs(model, instance, part_name, soil_set_name, depth,
                     errors.append('Traveling wave input requires Apparent Velocity greater than 0.')
             except Exception:
                 errors.append('Traveling wave input requires a numeric Apparent Velocity.')
+            try:
+                float(incident_angle)
+            except Exception:
+                errors.append('Incident Angle must be numeric.')
+            try:
+                float(azimuth_angle)
+            except Exception:
+                errors.append('Azimuth Angle must be numeric.')
             if str(propagation_vector or '').strip():
                 propagation = _parse_vector_components(propagation_vector)
                 if propagation is None or _vector_magnitude(propagation) <= 1.0e-20:
@@ -258,6 +267,7 @@ def Main(functionOption='Seismic', Model_name='Model-1',
          wave111='P', theta_a='0,1,0',
          modelLengthUnit='m',
          waveInputMode='Uniform', propagationVector='',
+         incidentAngle=0.0, azimuthAngle=0.0,
          apparentWaveVelocity=0.0, delayBinSize=0.0,
          siteProfileFile='', waveScale=1.0, baselineCorrection='None',
          t_time=20.0, d_time=0.01, iterationsNum=20, saveNum=2,
@@ -284,6 +294,8 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         'modelLengthUnit': modelLengthUnit,
         'waveInputMode': waveInputMode,
         'propagationVector': propagationVector,
+        'incidentAngle': incidentAngle,
+        'azimuthAngle': azimuthAngle,
         'apparentWaveVelocity': apparentWaveVelocity,
         'delayBinSize': delayBinSize,
         'siteProfileFile': siteProfileFile,
@@ -337,6 +349,7 @@ def Main(functionOption='Seismic', Model_name='Model-1',
             functionOption, geostaticFileType, geostaticFile, stepName,
             balanceTolerance, geoType, fileName, modelLengthUnit,
             theta_a, waveInputMode, propagationVector,
+            incidentAngle, azimuthAngle,
             apparentWaveVelocity, delayBinSize, siteProfileFile,
             waveScale, baselineCorrection, report)
         if errors:
@@ -349,9 +362,11 @@ def Main(functionOption='Seismic', Model_name='Model-1',
         report.add('Model', 'dimension', model_dimension)
         theta = parse_theta(theta_a)
         report.add('Model', 'incident_vector', theta)
-        propagation = parse_vector(
-            propagationVector, _vertical_axis_vector(verticalAxis))
+        propagation = resolve_propagation_vector(
+            propagationVector, verticalAxis, incidentAngle, azimuthAngle)
         report.add('Model', 'propagation_vector', propagation)
+        report.add('Model', 'incident_angle_deg', incidentAngle)
+        report.add('Model', 'azimuth_angle_deg', azimuthAngle)
 
         boundary_faces = get_boundary_node_faces(
             model, instance, soilSet, verticalAxis, model_dimension)
@@ -583,6 +598,43 @@ def _vertical_axis_vector(vertical_axis):
     if axis == 'Z':
         return [0.0, 0.0, 1.0]
     return [0.0, 1.0, 0.0]
+
+
+def _horizontal_basis_for_vertical_axis(vertical_axis):
+    axis = str(vertical_axis or 'Y').upper()
+    if axis == 'X':
+        return [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]
+    if axis == 'Z':
+        return [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]
+    return [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+
+
+def propagation_vector_from_angles(vertical_axis, incident_angle,
+                                   azimuth_angle):
+    vertical = _vertical_axis_vector(vertical_axis)
+    h1, h2 = _horizontal_basis_for_vertical_axis(vertical_axis)
+    theta = math.radians(float(incident_angle))
+    phi = math.radians(float(azimuth_angle))
+    horizontal_scale = math.sin(theta)
+    return [
+        math.cos(theta) * vertical[i] +
+        horizontal_scale * (
+            math.cos(phi) * h1[i] + math.sin(phi) * h2[i])
+        for i in range(3)
+    ]
+
+
+def resolve_propagation_vector(propagation_vector, vertical_axis,
+                               incident_angle=0.0, azimuth_angle=0.0):
+    text = str(propagation_vector or '').strip()
+    if text:
+        return parse_vector(text, _vertical_axis_vector(vertical_axis))
+    try:
+        return propagation_vector_from_angles(
+            vertical_axis, incident_angle, azimuth_angle)
+    except Exception:
+        print('Warning: invalid incident/azimuth angle, using vertical axis.')
+        return _vertical_axis_vector(vertical_axis)
 
 
 def normalize_wave_input_mode(mode):
@@ -2335,11 +2387,12 @@ def _add_wave_direction_warnings(wave_type, incident_direction,
     if wtype == 'P' and abs_dot < 0.5:
         message = ('P-wave input usually has motion direction close to the '
                    'propagation direction; check Incident Vector and '
-                   'Propagation Vector.')
+                   'Propagation Vector or incident angles.')
     if wtype == 'S' and abs_dot > 0.5:
         message = ('S-wave input usually has motion direction close to '
                    'perpendicular to the propagation direction; check '
-                   'Incident Vector and Propagation Vector.')
+                   'Incident Vector and Propagation Vector or incident '
+                   'angles.')
     if report is not None:
         report.add('SeismicInput', 'incident_propagation_dot', dot)
     if message:

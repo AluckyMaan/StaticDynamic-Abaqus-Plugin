@@ -69,6 +69,8 @@ class StaticDynamicDB(object):
             'theta_a': form.thetaTxt.getText(),
             'waveInputMode': form.waveInputModeCmb.getText(),
             'propagationVector': form.propagationTxt.getText(),
+            'incidentAngle': form.incidentAngleSpin.getValue(),
+            'azimuthAngle': form.azimuthAngleSpin.getValue(),
             'apparentWaveVelocity': form.apparentVelocitySpin.getValue(),
             'delayBinSize': form.delayBinSpin.getValue(),
             'siteProfileFile': form.siteProfileTxt.getText(),

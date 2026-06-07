@@ -2,9 +2,12 @@
 
 [中文说明](README.zh-CN.md)
 
-Current release version: `0.5.0`
+Current release version: `0.6.0`
 
-Latest stable release: `0.5.0`
+Latest stable release: `0.6.0`
+
+[Release notes: v0.6.0](docs/releases/v0.6.0.md) ·
+[GitHub release](https://github.com/AluckyMaan/StaticDynamic-Abaqus-Plugin/releases/tag/v0.6.0)
 
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
@@ -23,6 +26,8 @@ The current implementation focuses on a practical CAE workflow:
 - read PEER `.AT2/.VT2/.DT2` earthquake motions with unit conversion
 - scale and demean earthquake records before equivalent-load generation
 - apply equivalent seismic nodal forces from boundary spring-dashpot coefficients
+- generate oblique incident-wave arrival delays from arbitrary incidence and
+  azimuth angles
 - import a site-profile CSV for `LayeredSite` arrival-delay input
 - provide a GUI workflow for node-set generation, boundary application, and optional dynamic analysis setup
 
@@ -35,6 +40,31 @@ face or edge, soil material contribution, and tributary area or length.
 <p align="center">
   <img src="docs/assets/v0.4.0-static-dynamic-workflow.svg" alt="StaticDynamic v0.4.0 workflow: boundary detection, geostatic balance, PEER wave input, traveling-wave delay, and equivalent loads" width="900">
 </p>
+
+### v0.6.0 Oblique-Incidence Validation
+
+Version `0.6.0` was validated in Abaqus/CAE with a five-layer
+`30 m x 20 m x 20 m` soil model, 1 m C3D8R mesh, geostatic reaction extraction,
+viscous-spring boundary conversion, and a 32-degree oblique traveling-wave
+earthquake input. The dynamic ODB contains displacement `U`, velocity `V`, and
+acceleration `A` field outputs.
+
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/assets/v0.6.0-30x20x20-5layer-mesh.png" alt="v0.6.0 five-layer 1 m mesh validation model" width="100%"><br>
+      <sub>1 m five-layer mesh.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/v0.6.0-30x20x20-springdashpot-interactions.png" alt="v0.6.0 generated viscous-spring boundary features" width="100%"><br>
+      <sub>Viscous-spring boundary features.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/v0.6.0-30x20x20-oblique-loads.png" alt="v0.6.0 generated oblique seismic equivalent loads" width="100%"><br>
+      <sub>32-degree oblique seismic loads.</sub>
+    </td>
+  </tr>
+</table>
 
 ### GUI Workflow
 
@@ -65,7 +95,7 @@ features visible in the interaction display.
 
 ## Status
 
-This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Layered soil boundary grouping is implemented for common horizontal layered models by reading adjacent boundary element materials. Version `0.3.0` added practical PEER earthquake-motion input through equivalent spring-dashpot boundary nodal forces. Version `0.4.0` improved incident-wave input with spatial arrival-time delay and a first layered-site travel-time mode. Version `0.5.0` adds a small earthquake-input workbench layer with record scaling, mean-baseline removal, peak audit reporting, and imported site-profile CSV support.
+This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Layered soil boundary grouping is implemented for common horizontal layered models by reading adjacent boundary element materials. Version `0.3.0` added practical PEER earthquake-motion input through equivalent spring-dashpot boundary nodal forces. Version `0.4.0` improved incident-wave input with spatial arrival-time delay and a first layered-site travel-time mode. Version `0.5.0` adds a small earthquake-input workbench layer with record scaling, mean-baseline removal, peak audit reporting, and imported site-profile CSV support. Version `0.6.0` adds arbitrary-angle oblique incident-wave controls.
 
 ## Supported Environment
 
@@ -81,7 +111,7 @@ Copy this repository folder into an Abaqus plugin search path, for example:
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.5.0` in the plugin menu.
+Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.6.0` in the plugin menu.
 
 ## Basic Workflow
 
@@ -174,6 +204,10 @@ Version `0.4.0` adds a first incident-wave input mode:
   vertical axis.
 - `Incident Vector`: motion or force direction.
 - `Propagation Vector`: wave travel direction used for arrival-time delay.
+- `Incident Angle`: incidence angle in degrees measured from the selected
+  vertical axis. It is used when `Propagation Vector` is blank.
+- `Azimuth Angle`: horizontal-plane direction in degrees. For `Vertical Axis =
+  Y`, `0` points along global X and `90` points along global Z.
 - `Apparent Velocity`: propagation speed in the selected model length unit per
   second.
 - `Delay Bin Size`: optional delay grouping interval; `0` uses the wave-record
@@ -186,9 +220,11 @@ tau_i = ((x_i - x_ref) dot n) / c_app
 F_i(t) = K_i * u_g(t - tau_i) + C_i * v_g(t - tau_i)
 ```
 
-where `n` is the normalized `Propagation Vector`, `c_app` is `Apparent
-Velocity`, and `x_ref` is the leading boundary projection. This is a spatial
-arrival-time correction, not yet a full free-field wave scattering solution.
+where `n` is the normalized `Propagation Vector`, or the vector generated from
+`Incident Angle` and `Azimuth Angle` when `Propagation Vector` is blank.
+`c_app` is `Apparent Velocity`, and `x_ref` is the leading boundary projection.
+This is a spatial arrival-time correction, not yet a full free-field wave
+scattering solution.
 
 Traveling-wave input also writes `SeismicArrivalInfo.csv` with each boundary
 node's arrival delay. The run report records delay range and delay-bin counts

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 - 2026-06-03
+
+- Added oblique incident-wave controls with arbitrary `Incident Angle` and
+  `Azimuth Angle` inputs for traveling-wave arrival-delay generation.
+- Added angle-to-propagation-vector resolution using the selected vertical axis;
+  explicit `Propagation Vector` values remain supported and take precedence.
+- Added run-report fields for incident and azimuth angles.
+- Updated the Abaqus/CAE dialog and plugin menu to `StaticDynamic v0.6.0`.
+
 ## 0.5.0 - 2026-05-28
 
 - Added earthquake-record preprocessing controls: `Wave Scale` and
