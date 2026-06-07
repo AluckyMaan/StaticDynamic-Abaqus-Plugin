@@ -20,7 +20,7 @@ except ImportError:
 # Abaqus also exports a name called sum; the plugin needs Python's numeric sum.
 sum = _builtins.sum
 
-__version__ = '0.6.0'
+__version__ = '0.6.1'
 MAX_TRAVELING_DELAY_BINS = 200
 
 
@@ -642,7 +642,9 @@ def normalize_wave_input_mode(mode):
     compact = text.replace('-', '').replace('_', '').replace(' ', '')
     if compact in ('layeredsite', 'site', 'sitecolumn', 'freefield'):
         return 'LayeredSite'
-    if text in ('traveling', 'travelling', 'incident', 'oblique'):
+    if compact in ('traveling', 'travelling', 'travelingwave',
+                   'travellingwave', 'incident', 'incidentwave',
+                   'oblique', 'obliquewave'):
         return 'Traveling'
     return 'Uniform'
 
@@ -1305,7 +1307,7 @@ def export_boundary_info_csv(model, instance, boundary_faces, node_params,
     return path
 
 
-def export_seismic_arrival_info_csv(instance, boundary_faces, arrival_delays,
+def export_seismic_arrival_info_csv(boundary_faces, arrival_delays,
                                     report=None):
     path = os.path.join(os.path.dirname(__file__),
                         'SeismicArrivalInfo.csv')
@@ -1945,7 +1947,7 @@ def _prepare_motion_for_boundary_input(motion, report=None):
 
 def _unit_vector(vector):
     vals = [float(item) for item in vector]
-    mag = math.sqrt(sum([item * item for item in vals]))
+    mag = _vector_magnitude(vals)
     if mag <= 1.0e-20:
         return [0.0, 1.0, 0.0]
     return [item / mag for item in vals]
@@ -2012,7 +2014,7 @@ def _bin_arrival_delays(raw_delays, bin_size):
             delays = dict((label, delay - min_delay)
                           for label, delay in delays.items())
     unique_delays = sorted(set(['%.12g' % delay
-                                for delay in delays.values()]))
+                                for delay in delays.values()]), key=float)
     return delays, unique_delays
 
 
@@ -2038,7 +2040,8 @@ def _add_face_arrival_delay_stats(boundary_faces, delays, report):
         ]
         if not face_delays:
             continue
-        face_bins = sorted(set(['%.12g' % item for item in face_delays]))
+        face_bins = sorted(
+            set(['%.12g' % item for item in face_delays]), key=float)
         report.add('SeismicInput', face_name + '.arrival_delay_min',
                    min(face_delays))
         report.add('SeismicInput', face_name + '.arrival_delay_max',
@@ -2099,7 +2102,11 @@ def read_site_profile_csv(path):
     try:
         sample = f.readline()
         f.seek(0)
-        has_header = any([char.isalpha() for char in sample])
+        try:
+            float(sample.replace(',', ' ').split()[0])
+            has_header = False
+        except (IndexError, ValueError):
+            has_header = True
         if has_header:
             reader = csv.DictReader(f)
             for row in reader:
@@ -2207,8 +2214,6 @@ def _layered_site_profile_from_nodes(nodes, vertical_axis, node_params=None,
 
 def _profile_time_at(coord, profile):
     if not profile:
-        return 0.0
-    if len(profile) == 1:
         return 0.0
     if coord <= profile[0]['coord']:
         return profile[0]['travelTime']
@@ -2479,7 +2484,7 @@ def apply_seismic_load(model, instance, boundary_faces, params, wave_data,
         _add_wave_direction_warnings(
             wave_type, direction, propagation_direction, report=report)
         export_seismic_arrival_info_csv(
-            instance, boundary_faces, arrival_delays, report=report)
+            boundary_faces, arrival_delays, report=report)
     if report is not None:
         report.add('SeismicInput', 'direction_unit_vector', direction)
         report.add('SeismicInput', 'wave_type', wave_type)

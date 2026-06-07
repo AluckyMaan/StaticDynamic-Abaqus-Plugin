@@ -2,12 +2,12 @@
 
 [中文说明](README.zh-CN.md)
 
-Current release version: `0.6.0`
+Current release version: `0.6.1`
 
-Latest stable release: `0.6.0`
+Latest stable release: `0.6.1`
 
-[Release notes: v0.6.0](docs/releases/v0.6.0.md) ·
-[GitHub release](https://github.com/AluckyMaan/StaticDynamic-Abaqus-Plugin/releases/tag/v0.6.0)
+[Release notes: v0.6.1](docs/releases/v0.6.1.md) ·
+[GitHub release](https://github.com/AluckyMaan/StaticDynamic-Abaqus-Plugin/releases/tag/v0.6.1)
 
 StaticDynamic is an Abaqus/CAE Python plugin for soil static-dynamic analysis with viscous-spring artificial boundaries.
 
@@ -95,7 +95,7 @@ features visible in the interaction display.
 
 ## Status
 
-This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Layered soil boundary grouping is implemented for common horizontal layered models by reading adjacent boundary element materials. Version `0.3.0` added practical PEER earthquake-motion input through equivalent spring-dashpot boundary nodal forces. Version `0.4.0` improved incident-wave input with spatial arrival-time delay and a first layered-site travel-time mode. Version `0.5.0` adds a small earthquake-input workbench layer with record scaling, mean-baseline removal, peak audit reporting, and imported site-profile CSV support. Version `0.6.0` adds arbitrary-angle oblique incident-wave controls.
+This project is under active development. The 3D five-face viscous-spring boundary workflow has been tested on a regular homogeneous soil model. Layered soil boundary grouping is implemented for common horizontal layered models by reading adjacent boundary element materials. Version `0.3.0` added practical PEER earthquake-motion input through equivalent spring-dashpot boundary nodal forces. Version `0.4.0` improved incident-wave input with spatial arrival-time delay and a first layered-site travel-time mode. Version `0.5.0` adds a small earthquake-input workbench layer with record scaling, mean-baseline removal, peak audit reporting, and imported site-profile CSV support. Version `0.6.0` adds arbitrary-angle oblique incident-wave controls. Version `0.6.1` merges the `0.5.1` code-review fixes into the oblique-incidence branch.
 
 ## Supported Environment
 
@@ -111,7 +111,7 @@ Copy this repository folder into an Abaqus plugin search path, for example:
 C:\Users\<USER>\abaqus_plugins\StaticDynamic_v1
 ```
 
-Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.6.0` in the plugin menu.
+Restart Abaqus/CAE. The plugin should appear as `StaticDynamic v0.6.1` in the plugin menu.
 
 ## Basic Workflow
 
